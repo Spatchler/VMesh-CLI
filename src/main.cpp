@@ -1,0 +1,154 @@
+#include "VMesh/model.hpp"
+
+#include "SparseVoxelDAG.hpp"
+#include "progressBar.hpp"
+
+#include <boost/program_options.hpp>
+#include <iostream>
+#include <fstream>
+
+namespace po = boost::program_options;
+
+int main(int argc, char** argv) {
+  uint resolution;
+  bool isSvdag = false;
+  bool isVerbose = false;
+  bool isCompressed = false;
+  std::string in, out;
+
+  // ##############
+  // - Parse args -
+  // ##############
+
+  po::options_description desc("Options", 100, 40);
+  desc.add_options()
+    ("help,h", "produce help message")
+    ("verbose,v", "verbose output")
+    ("compressed,C", "compress voxel data")
+    ("svdag,S", "generate a Sparse Voxel DAG instead of a normal voxel grid")
+    ("resolution,R", po::value<uint>(&resolution)->default_value(100), "set voxel grid resolution")
+    ("in", po::value<std::string>(&in), "input file path")
+    ("out", po::value<std::string>(&out), "output file path")
+  ;
+
+  po::positional_options_description p;
+  p.add("in", 1);
+  p.add("out", 1);
+
+  po::variables_map vm;
+  try {
+    po::store(po::command_line_parser(argc, argv).
+              options(desc).positional(p).run(), vm);
+  }
+  catch (boost::wrapexcept<po::invalid_option_value> pErr) {
+    std::println("{}", pErr.what());
+    return 1;
+  }
+  catch (boost::wrapexcept<po::unknown_option> pErr) {
+    std::println("{}", pErr.what());
+    return 1;
+  }
+  po::notify(vm);
+  
+  if (vm.count("help")) {
+    std::println("Usage: vmesh OPTIONS input-path output-path\n\nMesh voxelizer\n");
+    std::cout << desc;
+    return 0;
+  }
+
+  if (vm.count("verbose"))
+    isVerbose = true;
+  if (vm.count("compressed"))
+    isCompressed = true;
+
+  if (!vm.count("in")) {
+    std::println("Missing input file path, use -h for help");
+    return 1;
+  }
+  if (!vm.count("out")) {
+    std::println("Missing output file path, use -h for help");
+    return 1;
+  }
+
+  if (vm.count("svdag"))
+    isSvdag = true;
+
+  // ############
+  // - Generate -
+  // ############
+
+  VMesh::Model model;
+  SparseVoxelDAG svdag(resolution);
+  std::function<void(float,float,float)> svdagInsertFunction = [](...){};
+
+  if (isSvdag) {
+    std::println("Generating Sparse Voxel DAG of resolution {}\n", resolution);
+
+    svdag.mData.push_back({glm::vec4(0,0,0,0)});
+    svdagInsertFunction = [&svdag](float x, float y, float z) {
+      svdag.insert(glm::vec3(x,y,z), {glm::vec4(1,1,1,1)});
+    };
+  }
+  else
+    std::println("Generating Voxel Data of resolution {}\n", resolution);
+
+  try {
+    model.loadMeshData(in);
+  }
+  catch (std::string pErr) {
+    std::println("{}", pErr);
+    return 1;
+  }
+
+  // glm::mat3 m(1.0f);
+  // model.transformMeshVertices(m);
+
+  std::stringstream stream;
+  model.setLogStream(&std::cout);
+  if (!isVerbose)
+    model.setLogStream(&stream);
+
+  std::future<void> f = startProgressBar(&model.mDefaultLogMutex, [&model](){ return model.getProgress(); }, "Generating");
+  model.generateVoxelData(resolution, svdagInsertFunction);
+
+  // #########
+  // - Write -
+  // #########
+
+  std::ofstream fout;
+  fout.open(out, std::ios::out | std::ios::binary);
+  if (!fout.is_open())
+    throw "Could not open output file";
+  if (!isCompressed) { // Not compressed
+    std::vector<std::vector<std::vector<bool>>> voxelGrid = model.getVoxelData();
+    char data = 0;
+    uint count = 0;
+    for (uint x = 0u; x < resolution; ++x) {
+      for (uint y = 0u; y < resolution; ++y) {
+        for (uint z = 0u; z < resolution; ++z) {
+          if (count == 7) {
+            // When the byte fills up write it to the file and reset
+            fout.write(reinterpret_cast<char*>(&data), sizeof(data));
+            data = 0;
+            count = 0;
+          }
+          if (voxelGrid[x][y][z]) {
+            // If the voxel is true write a positive bit a index 'count'
+            char mask = 1 << count;
+            data = data | mask;
+          }
+          ++count;
+        }
+      }
+    }
+  }
+  else { // Compressed
+    std::vector<uint> compressedData = model.generateCompressedVoxelData();
+    fout.write(reinterpret_cast<char*>(&compressedData.at(0)), compressedData.size() * sizeof(uint));
+  }
+
+  fout.close();
+
+  return 0;
+}
+
