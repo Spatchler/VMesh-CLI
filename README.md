@@ -3,7 +3,7 @@
 A CLI tool to generate voxel data from a triangle mesh using my C++ library [`VMesh`](https://github.com/Spatchler/VMesh). The tool simply outputs a binary file.
 
 ### Usage:
-```sh
+```
 Usage: vmesh OPTIONS input-path output-path
 
 Options:
