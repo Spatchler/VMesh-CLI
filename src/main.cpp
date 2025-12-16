@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
   fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint));
 
   if (!isCompressed && !isSvdag) { // Uncompressed and not svdag
-    std::vector<std::vector<std::vector<bool>>> voxelGrid = model.getVoxelData();
+    const std::vector<std::vector<std::vector<bool>>>& voxelGrid = model.getVoxelData();
     char data = 0;
     uint count = 0;
     for (uint x = 0u; x < resolution; ++x) {
