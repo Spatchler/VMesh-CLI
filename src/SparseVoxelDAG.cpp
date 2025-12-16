@@ -1,40 +1,23 @@
 #include "SparseVoxelDAG.hpp"
 
 SparseVoxelDAG::SparseVoxelDAG(uint pSize)
-:mSize(pSize), mMaxDepth(log2(pSize)), mMidpoint(UINT_MAX / 2) {
-  mIndices.push_back({mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint});
+:mSize(pSize), mMaxDepth(log2(pSize)) {
+  mIndices.push_back({0, 0, 0, 0, 0, 0, 0, 0}); // Air node
 }
 
-void SparseVoxelDAG::insert(const glm::vec3& pPoint, const VoxelData& pData) {
-  const auto result = std::find(std::begin(mData), std::end(mData), pData);
-  uint index;
-  if (result != mData.end())
-    index = std::distance(mData.begin(), result);
-  else {
-    index = mData.size();
-    mData.push_back(pData);
-  }
-  insertImpl(pPoint, index, 0, mSize, glm::vec3(0, 0, 0));
+void SparseVoxelDAG::insert(const glm::vec3& pPoint) {
+  insertImpl(pPoint, 2, mSize, glm::vec3(0, 0, 0));
 }
 
 uint SparseVoxelDAG::getSize() {
   return mSize;
 }
 
-uint SparseVoxelDAG::getMidpoint() {
-  return mMidpoint;
-}
-
 void SparseVoxelDAG::print() {
   std::println("\n------------------------------------");
   std::println("Indices:");
-  for (auto node: mIndices) {
+  for (auto node: mIndices)
     std::println("{}, {}, {}, {}, {}, {}, {}, {}", node[0], node[1], node[2], node[3], node[4], node[5], node[6], node[7]);
-  }
-  std::println("Data:");
-  for (VoxelData& node: mData) {
-    std::println("{}, {}, {}, {}", node.color.x, node.color.y, node.color.z, node.color.w);
-  }
   std::println("------------------------------------\n");
 }
 
@@ -55,30 +38,33 @@ glm::vec3 SparseVoxelDAG::toPos(uint pChildIndex) {
   return pos;
 }
 
-void SparseVoxelDAG::insertImpl(const glm::vec3& pPoint, const uint& pDataIndex, uint pNodeIndex, uint pNodeSize, glm::vec3 pNodeOrigin) {
-  // TODO: Add dynamic midpoint
+void SparseVoxelDAG::insertImpl(const glm::vec3& pPoint, uint pNodeIndex, uint pNodeSize, glm::vec3 pNodeOrigin) {
   pNodeSize = pNodeSize >> 1;
 
   glm::vec3 pos = pPoint;
   pos -= pNodeOrigin;
-  pos /= pNodeSize;
+  pos /= pNodeSize; // TODO: Optimize this division with bit shifts
   pos = glm::floor(pos);
   pNodeOrigin += pos * (float)pNodeSize;
-  uint& node = mIndices[pNodeIndex][toChildIndex(pos)];
+  uint& node = mIndices[pNodeIndex - 2][toChildIndex(pos)]; // Minus 2 because index 0 is used for air and 1 for a  voxel
   pNodeIndex = node;
 
-  if (pNodeSize == 1) { // Insert data index once we reach max depth
-    node = mMidpoint + pDataIndex;
+  if (node == 1) // If we reach a full node, return
+    return;
+
+  if (pNodeSize == 1) { // Insert once we reach max depth
+    node = 1;
     return;
   }
 
   // If node doesn't exist create it
-  if (node == 0 || node == mMidpoint) {
-    pNodeIndex = mIndices.size();
-    node = mIndices.size();
-    mIndices.push_back({mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint, mMidpoint}); // Air node
+  if (node == 0) {
+    node = mIndices.size() + 2;
+    pNodeIndex = mIndices.size() + 2;
+    mIndices.push_back({0, 0, 0, 0, 0, 0, 0, 0}); // Air node
+    // node reference is now invalid
   }
 
-  insertImpl(pPoint, pDataIndex, pNodeIndex, pNodeSize, pNodeOrigin);
+  insertImpl(pPoint, pNodeIndex, pNodeSize, pNodeOrigin);
 }
 

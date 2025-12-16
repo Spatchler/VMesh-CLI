@@ -37,8 +37,7 @@ int main(int argc, char** argv) {
 
   po::variables_map vm;
   try {
-    po::store(po::command_line_parser(argc, argv).
-              options(desc).positional(p).run(), vm);
+    po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
   }
   catch (boost::wrapexcept<po::invalid_option_value> pErr) {
     std::println("{}", pErr.what());
@@ -73,25 +72,31 @@ int main(int argc, char** argv) {
   if (vm.count("svdag"))
     isSvdag = true;
 
+  if (isSvdag && isCompressed) {
+    std::println("There is currently no support for compressed SVDAGs");
+    return 1;
+  }
+
   // ############
   // - Generate -
   // ############
 
   VMesh::Model model;
   SparseVoxelDAG svdag(resolution);
-  std::function<void(float,float,float)> svdagInsertFunction = [](...){};
 
+  // Set insert function if generating an svdag
+  std::function<void(float,float,float)> svdagInsertFunction = [](...){};
   if (isSvdag) {
     std::println("Generating Sparse Voxel DAG of resolution {}\n", resolution);
 
-    svdag.mData.push_back({glm::vec4(0,0,0,0)});
     svdagInsertFunction = [&svdag](float x, float y, float z) {
-      svdag.insert(glm::vec3(x,y,z), {glm::vec4(1,1,1,1)});
+      svdag.insert(glm::vec3(x,y,z));
     };
   }
   else
-    std::println("Generating Voxel Data of resolution {}\n", resolution);
+    std::println("Generating Voxel Data of resolution {}", resolution);
 
+  // Load mesh data
   try {
     model.loadMeshData(in);
   }
@@ -100,14 +105,31 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // glm::mat3 m(1.0f);
-  // model.transformMeshVertices(m);
+  // Get smallest and largest positions in each axis of the models vertices
+  const std::vector<glm::vec3>& meshVertices = model.getMeshVertices();
+  const std::vector<uint>& meshIndices = model.getMeshIndices();
+  glm::vec3 smallest = meshVertices.at(0);
+  glm::vec3 largest = meshVertices.at(0);
+  for (uint i = 0; i < meshIndices.size(); ++i) {
+    glm::vec3 v = meshVertices[meshIndices[i]];
+    smallest = glm::min(smallest, v);
+    largest = glm::max(largest, v);
+  }
 
+  // Create transformation matrix to fit model perfectly inside the grid
+  glm::mat4 m(1.0f);
+  m = glm::translate(m, glm::vec3(0, 0, 0) - smallest);
+  m = glm::scale(m, glm::vec3(resolution, resolution, resolution) / glm::vec3(m*glm::vec4(largest, 1)) );
+
+  model.transformMeshVertices(m);
+
+  // Set log stream
   std::stringstream stream;
-  model.setLogStream(&std::cout);
-  if (!isVerbose)
-    model.setLogStream(&stream);
+  model.setLogStream(&stream);
+  if (isVerbose)
+    model.setLogStream(&std::cout);
 
+  // Generate
   std::future<void> f = startProgressBar(&model.mDefaultLogMutex, [&model](){ return model.getProgress(); }, "Generating");
   model.generateVoxelData(resolution, svdagInsertFunction);
 
@@ -119,7 +141,11 @@ int main(int argc, char** argv) {
   fout.open(out, std::ios::out | std::ios::binary);
   if (!fout.is_open())
     throw "Could not open output file";
-  if (!isCompressed) { // Not compressed
+
+  // Write resolution metadata
+  fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint));
+
+  if (!isCompressed && !isSvdag) { // Uncompressed and not svdag
     std::vector<std::vector<std::vector<bool>>> voxelGrid = model.getVoxelData();
     char data = 0;
     uint count = 0;
@@ -142,9 +168,12 @@ int main(int argc, char** argv) {
       }
     }
   }
-  else { // Compressed
+  else if (isCompressed && !isSvdag) { // Compressed and not svdag
     std::vector<uint> compressedData = model.generateCompressedVoxelData();
     fout.write(reinterpret_cast<char*>(&compressedData.at(0)), compressedData.size() * sizeof(uint));
+  }
+  else if (!isCompressed && isSvdag) { // Uncompressed svdag
+    fout.write(reinterpret_cast<char*>(&svdag.mIndices.at(0)), svdag.mIndices.size() * (8 * sizeof(uint)));
   }
 
   fout.close();
