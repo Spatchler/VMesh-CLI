@@ -14,8 +14,8 @@ int main(int argc, char** argv) {
   bool isSvdag = false;
   bool isVerbose = false;
   bool isCompressed = false;
-  std::string in, out;
-
+  std::string in, out, scaleMode;
+  
   // ##############
   // - Parse args -
   // ##############
@@ -26,7 +26,8 @@ int main(int argc, char** argv) {
     ("verbose,v", "verbose output")
     ("compressed,C", "compress voxel data")
     ("svdag,S", "generate a Sparse Voxel DAG instead of a normal voxel grid")
-    ("resolution,R", po::value<uint>(&resolution)->default_value(100), "set voxel grid resolution")
+    ("resolution,R", po::value<uint>(&resolution)->default_value(128), "set voxel grid resolution")
+    ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode either (proportional, stretch, none)")
     ("in", po::value<std::string>(&in), "input file path")
     ("out", po::value<std::string>(&out), "output file path")
   ;
@@ -40,11 +41,11 @@ int main(int argc, char** argv) {
     po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
   }
   catch (boost::wrapexcept<po::invalid_option_value> pErr) {
-    std::println("{}", pErr.what());
+    std::println("{}, use -h for help", pErr.what());
     return 1;
   }
   catch (boost::wrapexcept<po::unknown_option> pErr) {
-    std::println("{}", pErr.what());
+    std::println("{}, use -h for help", pErr.what());
     return 1;
   }
   po::notify(vm);
@@ -72,8 +73,19 @@ int main(int argc, char** argv) {
   if (vm.count("svdag"))
     isSvdag = true;
 
+  if (scaleMode != "proportional" && scaleMode != "stretch" && scaleMode != "none") {
+    std::println("Invalid scale mode, use -h for help");
+    return 1;
+  }
+
   if (isSvdag && isCompressed) {
     std::println("There is currently no support for compressed SVDAGs");
+    return 1;
+  }
+
+  float logRes = std::log2f(resolution);
+  if (isSvdag && logRes != std::ceil(logRes) && logRes != std::floor(logRes)) {
+    std::println("SVDAG resolution has to be a power of 2");
     return 1;
   }
 
@@ -118,9 +130,15 @@ int main(int argc, char** argv) {
 
   // Create transformation matrix to fit model perfectly inside the grid
   glm::mat4 m(1.0f);
+  if (scaleMode == "stretch")
+    m = glm::scale(m, glm::vec3(resolution-1, resolution-1, resolution-1) / (largest + (glm::vec3(0, 0, 0) - smallest)) );
+  if (scaleMode == "proportional") {
+    glm::vec3 vec(glm::vec3(resolution-1, resolution-1, resolution-1) / (largest + (glm::vec3(0, 0, 0) - smallest)));
+    float v = std::min(vec.x, std::min(vec.y, vec.z));
+    m = glm::scale(m,  glm::vec3(v, v, v));
+  }
   m = glm::translate(m, glm::vec3(0, 0, 0) - smallest);
-  m = glm::scale(m, glm::vec3(resolution, resolution, resolution) / glm::vec3(m*glm::vec4(largest, 1)) );
-
+  
   model.transformMeshVertices(m);
 
   // Set log stream
