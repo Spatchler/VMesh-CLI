@@ -20,14 +20,18 @@ int main(int argc, char** argv) {
   // - Parse args -
   // ##############
 
-  po::options_description desc("Options", 100, 40);
-  desc.add_options()
+  po::options_description visibleOptions("Options", 100, 40);
+  visibleOptions.add_options()
     ("help,h", "produce help message")
     ("verbose,v", "verbose output")
     ("compressed,C", "compress voxel data")
     ("svdag,S", "generate a Sparse Voxel DAG instead of a normal voxel grid")
     ("resolution,R", po::value<uint>(&resolution)->default_value(128), "set voxel grid resolution")
     ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode either (proportional, stretch, none)")
+  ;
+
+  po::options_description hiddenOptions("Hidden");
+  hiddenOptions.add_options()
     ("in", po::value<std::string>(&in), "input file path")
     ("out", po::value<std::string>(&out), "output file path")
   ;
@@ -36,9 +40,12 @@ int main(int argc, char** argv) {
   p.add("in", 1);
   p.add("out", 1);
 
+  po::options_description options("Options", 100, 40);
+  options.add(visibleOptions).add(hiddenOptions);
+
   po::variables_map vm;
   try {
-    po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
+    po::store(po::command_line_parser(argc, argv).options(options).positional(p).run(), vm);
   }
   catch (boost::wrapexcept<po::invalid_option_value> pErr) {
     std::println("{}, use -h for help", pErr.what());
@@ -52,7 +59,7 @@ int main(int argc, char** argv) {
   
   if (vm.count("help")) {
     std::println("Usage: vmesh OPTIONS input-path output-path\n\nMesh voxelizer\n");
-    std::cout << desc;
+    std::cout << visibleOptions;
     return 0;
   }
 
