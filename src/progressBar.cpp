@@ -1,7 +1,9 @@
 #include "progressBar.hpp"
 
 void printProgressBar(float pProgress, const std::string& pTitle, uint8_t pPrimaryEscapeColour, uint8_t pSecondaryEscapeColour, uint pWidth) {
-  std::print("\x1b[1F\x1b[2K{} ", pTitle);
+  // std::print("\x1b[1F\x1b[2K{} ", pTitle);
+  // std::print("\x1b 8\x1b 7{} ", pTitle);
+  std::print("\x1b[u\x1b[s{} ", pTitle);
   float threshold = std::ceil(pProgress * pWidth);
   std::print("\x1b[{}m\x1b[{}m", pPrimaryEscapeColour, pPrimaryEscapeColour + 10);
   for (uint i = 0; i < threshold; ++i) {
@@ -21,6 +23,10 @@ void printProgressBar(float pProgress, const std::string& pTitle, uint8_t pPrima
 }
 
 void printProgressBarUntilDone(std::mutex* pSTDOUTMutex, const std::function<float()>& pGetProgressFunc, const std::string& pTitle, uint8_t pPrimaryEscapeColour, uint8_t pSecondaryEscapeColour, uint pWidth) {
+  {
+    std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
+    std::print("\x1b[s");
+  }
   float p = 0.f;
   while (p < 1) {
     p = pGetProgressFunc();

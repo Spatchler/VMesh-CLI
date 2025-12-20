@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
   // Set insert function if generating an svdag
   std::function<void(float,float,float)> svdagInsertFunction = [](...){};
   if (isSvdag) {
-    std::println("Generating Sparse Voxel DAG of resolution {}\n", resolution);
+    std::println("Generating Sparse Voxel DAG of resolution {}", resolution);
 
     svdagInsertFunction = [&svdag](float x, float y, float z) {
       svdag.insert(glm::vec3(x,y,z));

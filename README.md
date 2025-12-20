@@ -22,15 +22,18 @@ An SVDAG file is an array of uint32s. The first uint32 is the resolution and the
 
 Example:
 ```cpp
+// Output variables
+uint32_t resolution;
+std::vector<std::array<uint32_t, 8>> indices;
+
+// Load file
 std::ifstream fin;
 fin.open(path, std::ios::binary | std::ios::in);
 
 // Read resolution
-uint resolution;
-fin.read(reinterpret_cast<char*>(&resolution), 4);
+fin.read(reinterpret_cast<char*>(&resolution), sizeof(uint32_t));
 
 // Load indices
-std::vector<std::array<uint32_t, 8>> indices;
 uint32_t value;
 uint i = 0;
 std::array<uint32_t, 8> node;
