@@ -7,13 +7,14 @@ A CLI tool to generate voxel data from a triangle mesh using my C++ library [`VM
 Usage: vmesh OPTIONS input-path output-path
 
 Options:
-  -h [ --help ]                  produce help message
-  -v [ --verbose ]               verbose output
-  -C [ --compressed ]            compress voxel data
-  -S [ --svdag ]                 generate a Sparse Voxel DAG instead of a normal voxel grid
-  -R [ --resolution ] arg (=100) set voxel grid resolution
-  --in arg                       input file path
-  --out arg                      output file path
+  -h [ --help ]                    produce help message
+  -v [ --verbose ]                 verbose output
+  -C [ --compressed ]              compress voxel data
+  -S [ --svdag ]                   generate a Sparse Voxel DAG instead of a normal voxel grid
+  -R [ --resolution ] arg (=128)   set voxel grid resolution
+  --scale-mode arg (=proportional) scaling mode either (proportional, stretch, none)
+  --in arg                         input file path
+  --out arg                        output file path
 ```
 
 ## Loading files
