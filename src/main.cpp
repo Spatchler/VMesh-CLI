@@ -1,4 +1,5 @@
 #include "VMesh/model.hpp"
+#include "VMesh/voxelGrid.hpp"
 
 #include "SparseVoxelDAG.hpp"
 #include "progressBar.hpp"
@@ -104,11 +105,11 @@ int main(int argc, char** argv) {
   SparseVoxelDAG svdag(resolution);
 
   // Set insert function if generating an svdag
-  std::function<void(float,float,float)> svdagInsertFunction = [](...){};
+  std::function<void(float,float,float)> insertFunc = [](...){};
   if (isSvdag) {
     std::println("Generating Sparse Voxel DAG of resolution {}", resolution);
 
-    svdagInsertFunction = [&svdag](float x, float y, float z) {
+    insertFunc = [&svdag](float x, float y, float z) {
       svdag.insert(glm::vec3(x,y,z));
     };
   }
@@ -117,7 +118,7 @@ int main(int argc, char** argv) {
 
   // Load mesh data
   try {
-    model.loadMeshData(in);
+    model.load(in);
   }
   catch (std::string pErr) {
     std::println("{}", pErr);
@@ -125,8 +126,8 @@ int main(int argc, char** argv) {
   }
 
   // Get smallest and largest positions in each axis of the models vertices
-  const std::vector<glm::vec3>& meshVertices = model.getMeshVertices();
-  const std::vector<uint>& meshIndices = model.getMeshIndices();
+  const std::vector<glm::vec3>& meshVertices = model.getVertices();
+  const std::vector<uint>& meshIndices = model.getIndices();
   glm::vec3 smallest = meshVertices.at(0);
   glm::vec3 largest = meshVertices.at(0);
   for (uint i = 0; i < meshIndices.size(); ++i) {
@@ -146,17 +147,21 @@ int main(int argc, char** argv) {
   }
   m = glm::translate(m, glm::vec3(0, 0, 0) - smallest);
   
-  model.transformMeshVertices(m);
+  model.transformVertices(m);
 
   // Set log stream
+  VMesh::VoxelGrid voxelGrid(resolution);
+
   std::stringstream stream;
-  model.setLogStream(&stream);
+  voxelGrid.setLogStream(&stream);
   if (isVerbose)
-    model.setLogStream(&std::cout);
+    voxelGrid.setLogStream(&std::cout);
 
   // Generate
-  std::future<void> f = startProgressBar(&model.mDefaultLogMutex, [&model](){ return model.getProgress(); }, "Generating");
-  model.generateVoxelData(resolution, svdagInsertFunction);
+  uint trisComplete = 0;
+  float triCountInv = 1.f/model.getTriCount();
+  std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, [&trisComplete, &triCountInv](){ return trisComplete * triCountInv; }, "Generating");
+  voxelGrid.voxelizeMesh(model, &trisComplete, insertFunc);
 
   // #########
   // - Write -
@@ -171,7 +176,7 @@ int main(int argc, char** argv) {
   fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint));
 
   if (!isCompressed && !isSvdag) { // Uncompressed and not svdag
-    const std::vector<std::vector<std::vector<bool>>>& voxelGrid = model.getVoxelData();
+    const std::vector<std::vector<std::vector<bool>>>& voxelData = voxelGrid.getVoxelData();
     char data = 0;
     uint count = 0;
     for (uint x = 0u; x < resolution; ++x) {
@@ -183,7 +188,7 @@ int main(int argc, char** argv) {
             data = 0;
             count = 0;
           }
-          if (voxelGrid[x][y][z]) {
+          if (voxelData[x][y][z]) {
             // If the voxel is true write a positive bit a index 'count'
             char mask = 1 << count;
             data = data | mask;
@@ -194,7 +199,7 @@ int main(int argc, char** argv) {
     }
   }
   else if (isCompressed && !isSvdag) { // Compressed and not svdag
-    std::vector<uint> compressedData = model.generateCompressedVoxelData();
+    std::vector<uint> compressedData = voxelGrid.generateCompressedVoxelData();
     fout.write(reinterpret_cast<char*>(&compressedData.at(0)), compressedData.size() * sizeof(uint));
   }
   else if (!isCompressed && isSvdag) { // Uncompressed svdag
