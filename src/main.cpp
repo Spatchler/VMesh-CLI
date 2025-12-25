@@ -167,46 +167,27 @@ int main(int argc, char** argv) {
   // - Write -
   // #########
 
-  std::ofstream fout;
-  fout.open(out, std::ios::out | std::ios::binary);
-  if (!fout.is_open())
-    throw "Could not open output file";
+  if (!isCompressed && !isSvdag) // Uncompressed and not svdag
+    voxelGrid.writeToFile(out);
+  else if (isCompressed && !isSvdag) // Compressed and not svdag
+    voxelGrid.writeToFileCompressed(out);
+  else if (isSvdag) {
+    std::ofstream fout;
+    fout.open(out, std::ios::out | std::ios::binary);
+    if (!fout.is_open())
+      throw "Could not open output file";
 
-  // Write resolution metadata
-  fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint));
+    // Write resolution metadata
+    fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint));
 
-  if (!isCompressed && !isSvdag) { // Uncompressed and not svdag
-    const std::vector<std::vector<std::vector<bool>>>& voxelData = voxelGrid.getVoxelData();
-    char data = 0;
-    uint count = 0;
-    for (uint x = 0u; x < resolution; ++x) {
-      for (uint y = 0u; y < resolution; ++y) {
-        for (uint z = 0u; z < resolution; ++z) {
-          if (count == 7) {
-            // When the byte fills up write it to the file and reset
-            fout.write(reinterpret_cast<char*>(&data), sizeof(data));
-            data = 0;
-            count = 0;
-          }
-          if (voxelData[x][y][z]) {
-            // If the voxel is true write a positive bit a index 'count'
-            char mask = 1 << count;
-            data = data | mask;
-          }
-          ++count;
-        }
-      }
-    }
-  }
-  else if (isCompressed && !isSvdag) { // Compressed and not svdag
-    std::vector<uint> compressedData = voxelGrid.generateCompressedVoxelData();
-    fout.write(reinterpret_cast<char*>(&compressedData.at(0)), compressedData.size() * sizeof(uint));
-  }
-  else if (!isCompressed && isSvdag) { // Uncompressed svdag
-    fout.write(reinterpret_cast<char*>(&svdag.mIndices.at(0)), svdag.mIndices.size() * (8 * sizeof(uint)));
+    if (!isCompressed) // Uncompressed svdag
+      fout.write(reinterpret_cast<char*>(&svdag.mIndices.at(0)), svdag.mIndices.size() * (8 * sizeof(uint)));
+    else
+      return 1;
+
+    fout.close();
   }
 
-  fout.close();
 
   return 0;
 }
