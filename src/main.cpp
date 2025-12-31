@@ -1,14 +1,20 @@
 #include "VMesh/model.hpp"
 #include "VMesh/voxelGrid.hpp"
 
-#include "SparseVoxelDAG.hpp"
+// #include "SparseVoxelDAG.hpp"
 #include "progressBar.hpp"
 
+#include <array>
+#include <vector>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <fstream>
 
 namespace po = boost::program_options;
+
+uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount);
+
+uint generateSVDAGBottomUp(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount);
 
 int main(int argc, char** argv) {
   uint resolution;
@@ -86,11 +92,6 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  if (isSvdag && isCompressed) {
-    std::println("There is currently no support for compressed SVDAGs");
-    return 1;
-  }
-
   float logRes = std::log2f(resolution);
   if (isSvdag && logRes != std::ceil(logRes) && logRes != std::floor(logRes)) {
     std::println("SVDAG resolution has to be a power of 2");
@@ -102,19 +103,16 @@ int main(int argc, char** argv) {
   // ############
 
   VMesh::Model model;
-  SparseVoxelDAG svdag(resolution);
 
   // Set insert function if generating an svdag
-  std::function<void(float,float,float)> insertFunc = [](...){};
-  if (isSvdag) {
-    std::println("Generating Sparse Voxel DAG of resolution {}", resolution);
+  std::string compressedStr = "uncompressed";
+  if (isCompressed)
+    compressedStr = "compressed";
 
-    insertFunc = [&svdag](float x, float y, float z) {
-      svdag.insert(glm::vec3(x,y,z));
-    };
-  }
+  if (isSvdag)
+    std::println("Generating {0} Sparse Voxel DAG of resolution {1}", compressedStr, resolution);
   else
-    std::println("Generating Voxel Data of resolution {}", resolution);
+    std::println("Generating {0} Voxel Data of resolution {1}", compressedStr, resolution);
 
   // Load mesh data
   try {
@@ -160,17 +158,21 @@ int main(int argc, char** argv) {
   // Generate
   uint trisComplete = 0;
   float triCountInv = 1.f/model.getTriCount();
-  std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, [&trisComplete, &triCountInv](){ return trisComplete * triCountInv; }, "Generating");
-  voxelGrid.voxelizeMesh(model, &trisComplete, insertFunc);
+  std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, [&trisComplete, &triCountInv](){ return trisComplete * triCountInv; }, "Voxelizing");
+  voxelGrid.voxelizeMesh(model, &trisComplete);
 
   // #########
   // - Write -
   // #########
 
+  if (!isSvdag)
+    std::println("Writing...");
+
   if (!isCompressed && !isSvdag) // Uncompressed and not svdag
     voxelGrid.writeToFile(out);
   else if (isCompressed && !isSvdag) // Compressed and not svdag
     voxelGrid.writeToFileCompressed(out);
+
   else if (isSvdag) {
     std::ofstream fout;
     fout.open(out, std::ios::out | std::ios::binary);
@@ -180,15 +182,119 @@ int main(int argc, char** argv) {
     // Write resolution metadata
     fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint));
 
-    if (!isCompressed) // Uncompressed svdag
-      fout.write(reinterpret_cast<char*>(&svdag.mIndices.at(0)), svdag.mIndices.size() * (8 * sizeof(uint)));
-    else
-      return 1;
+    // SparseVoxelDAG svdag(resolution);
+    const std::vector<std::vector<std::vector<bool>>>& voxelData = voxelGrid.getVoxelData();
+
+    std::vector<std::array<uint32_t, 8>> indices;
+    std::vector<std::tuple<uint, uint, glm::vec3, uint>> queue;
+    uint completedCount = 0;
+    uint total = (std::log2(resolution)+1) * resolution * resolution * resolution;
+    double totalInv = 1.f/total;
+
+    std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, [&completedCount, &totalInv](){ return completedCount * totalInv; }, "Generating SVDAG");
+
+    generateSVDAGTopDown(indices, voxelData, glm::vec3(0, 0, 0), resolution, queue, completedCount);
+    uint queueIndex = 0;
+
+    while (queueIndex < queue.size()) {
+      auto queueItem = queue.at(queueIndex);
+      indices.at(std::get<0>(queueItem)).at(std::get<1>(queueItem)) = generateSVDAGTopDown(indices, voxelData, std::get<2>(queueItem), std::get<3>(queueItem), queue, completedCount);
+      // std::println("total: {}, {}", completedCount, total);
+      ++queueIndex;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(voxelGrid.mDefaultLogMutex);
+      std::println("Writing...");
+    }
+
+    fout.write(reinterpret_cast<char*>(&indices.at(0)), indices.size() * 8 * sizeof(uint32_t));
 
     fout.close();
   }
 
+  std::println("Complete");
 
   return 0;
+}
+
+glm::vec3 toPos(uint pChildIndex) {
+  glm::vec3 pos;
+  pos.x = 1 & pChildIndex;
+  pos.y = ((1 << 1) & pChildIndex) != 0;
+  pos.z = ((1 << 2) & pChildIndex) != 0;
+  return pos;
+}
+
+uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount) {
+  bool allZero = true;
+  bool allOne = true;
+  uint total = pCompletedCount + pNodeSize * pNodeSize * pNodeSize;
+  // {
+    // VMesh::ScopedTimer t("Scanning");
+    for (uint x = pNodeOrigin.x; x < pNodeOrigin.x + pNodeSize; ++x) {
+      for (uint y = pNodeOrigin.y; y < pNodeOrigin.y + pNodeSize; ++y) {
+        for (uint z = pNodeOrigin.z; z < pNodeOrigin.z + pNodeSize; ++z) {
+          const bool& v = pVoxelData[x][y][z];
+          allZero = allZero && v == 0;
+          allOne = allOne && v == 1;
+          if (!allOne && !allZero)
+            break;
+          ++pCompletedCount;
+        }
+      }
+    }
+  // }
+  pCompletedCount = total;
+
+  if (allZero || allOne)
+    pCompletedCount += std::log2(pNodeSize) * pNodeSize * pNodeSize * pNodeSize;
+  if (allZero)
+    return 0;
+  else if (allOne)
+    return 1;
+
+  pNodeSize = pNodeSize >> 1;
+
+  // {
+    // VMesh::ScopedTimer t("Adding to queue");
+    pIndices.emplace_back();
+    for (uint i = 0; i < 8; ++i)
+      pQueue.push_back({pIndices.size()-1, i, pNodeOrigin + (float)pNodeSize * toPos(i), pNodeSize});
+  // }
+
+  return pIndices.size() + 1;
+}
+
+uint generateSVDAGBottomUp(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount) {
+  bool allZero = true;
+  bool allOne = true;
+  // uint total = pCompletedCount + pNodeSize * pNodeSize * pNodeSize;
+  for (uint x = pNodeOrigin.x; x < pNodeOrigin.x + pNodeSize; ++x) {
+    for (uint y = pNodeOrigin.y; y < pNodeOrigin.y + pNodeSize; ++y) {
+      for (uint z = pNodeOrigin.z; z < pNodeOrigin.z + pNodeSize; ++z) {
+        if (pVoxelData[x][y][z] != 0)
+          allZero = false;
+        if (pVoxelData[x][y][z] != 1)
+          allOne = false;
+        if (!allOne && !allZero)
+          break;
+        // ++pCompletedCount;
+      }
+    }
+  }
+
+  if (allZero)
+    return 0;
+  else if (allOne)
+    return 1;
+
+  pNodeSize = pNodeSize >> 1;
+
+  pIndices.emplace_back();
+  for (uint i = 0; i < 8; ++i)
+    pQueue.push_back({pIndices.size()-1, i, pNodeOrigin + (float)pNodeSize * toPos(i), pNodeSize});
+
+  return pIndices.size() + 1;
 }
 
