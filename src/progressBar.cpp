@@ -51,7 +51,10 @@ void printProgressBarUntilDone(std::mutex* pSTDOUTMutex, const std::function<flo
       break;
     }
   }
-  std::println("Finished {}", pTitle);
+  {
+    std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
+    std::println("Finished {}", pTitle);
+  }
 }
 
 std::future<void> startProgressBar(std::mutex* pSTDOUTMutex, const std::function<float()>& pGetProgressFunc, const std::string& pTitle, uint8_t pPrimaryEscapeColour, uint8_t pSecondaryEscapeColour, uint pWidth) {

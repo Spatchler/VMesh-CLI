@@ -165,8 +165,10 @@ int main(int argc, char** argv) {
   // - Write -
   // #########
 
-  if (!isSvdag)
+  if (!isSvdag) {
+    std::lock_guard<std::mutex> lock(voxelGrid.mDefaultLogMutex);
     std::println("Writing...");
+  }
 
   if (!isCompressed && !isSvdag) // Uncompressed and not svdag
     voxelGrid.writeToFile(out);
