@@ -12,12 +12,14 @@
 
 namespace po = boost::program_options;
 
+glm::vec3 toPos(uint pChildIndex);
+
 uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount);
 
 uint generateSVDAGBottomUp(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount);
 
 int main(int argc, char** argv) {
-  uint resolution;
+  uint resolution, maxDepth;
   bool isSvdag = false;
   bool isVerbose = false;
   bool isCompressed = false;
@@ -92,10 +94,13 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  float logRes = std::log2f(resolution);
-  if (isSvdag && logRes != std::ceil(logRes) && logRes != std::floor(logRes)) {
-    std::println("SVDAG resolution has to be a power of 2");
-    return 1;
+  {
+    float logRes = std::log2f(resolution);
+    if (isSvdag && logRes != std::ceil(logRes) && logRes != std::floor(logRes)) {
+      std::println("SVDAG resolution has to be a power of 2");
+      return 1;
+    }
+    maxDepth = logRes;
   }
 
   // ############
@@ -165,15 +170,14 @@ int main(int argc, char** argv) {
   // - Write -
   // #########
 
-  if (!isSvdag) {
-    std::lock_guard<std::mutex> lock(voxelGrid.mDefaultLogMutex);
-    std::println("Writing...");
-  }
-
   if (!isCompressed && !isSvdag) // Uncompressed and not svdag
     voxelGrid.writeToFile(out);
-  else if (isCompressed && !isSvdag) // Compressed and not svdag
-    voxelGrid.writeToFileCompressed(out);
+  else if (isCompressed && !isSvdag) { // Compressed and not svdag
+    uint voxelsComplete = 0;
+    float totalInv = 1.f/voxelGrid.getVolume();
+    std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, [&voxelsComplete, &totalInv](){ return voxelsComplete * totalInv; }, "Compressing");
+    voxelGrid.writeToFileCompressed(out, &voxelsComplete);
+  }
 
   else if (isSvdag) {
     std::ofstream fout;
@@ -186,12 +190,13 @@ int main(int argc, char** argv) {
 
     // SparseVoxelDAG svdag(resolution);
     const std::vector<std::vector<std::vector<bool>>>& voxelData = voxelGrid.getVoxelData();
+    // const std::vector<char>& voxelData = voxelGrid.getVoxelDataBytes();
 
     std::vector<std::array<uint32_t, 8>> indices;
     std::vector<std::tuple<uint, uint, glm::vec3, uint>> queue;
     uint completedCount = 0;
-    uint total = (std::log2(resolution)+1) * resolution * resolution * resolution;
-    double totalInv = 1.f/total;
+    uint total = (maxDepth + 1) * resolution * resolution * resolution;
+    float totalInv = 1.f/total;
 
     std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, [&completedCount, &totalInv](){ return completedCount * totalInv; }, "Generating SVDAG");
 
@@ -205,10 +210,25 @@ int main(int argc, char** argv) {
       ++queueIndex;
     }
 
-    {
-      std::lock_guard<std::mutex> lock(voxelGrid.mDefaultLogMutex);
-      std::println("Writing...");
-    }
+    // for (uint i = 1; i < maxDepth; ++i) {
+    //   uint nodeSize = resolution >> i;
+    //   uint volume = nodeSize * nodeSize * nodeSize;
+    //   glm::ivec3 nodeOrigin;
+    //   for (nodeOrigin.x = 0; nodeOrigin.x < nodeSize; ++nodeOrigin.x) {
+    //     for (nodeOrigin.y = 0; nodeOrigin.y < nodeSize; ++nodeOrigin.y) {
+    //       for (nodeOrigin.z = 0; nodeOrigin.z < nodeSize; ++nodeOrigin.z) {
+    //         bool allOne = true;
+    //         bool allZero = true;
+    //         for (uint j = 0; j < volume && (allOne || allZero); ++j) {
+    //           glm::ivec3 pos = nodeOrigin * i + toPos(j);
+    //           const bool& v = pVoxelData[pos.x][pos.y][pos.z];
+    //           allZero = allZero && v == 0;
+    //           allOne = allOne && v == 1;
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
 
     fout.write(reinterpret_cast<char*>(&indices.at(0)), indices.size() * 8 * sizeof(uint32_t));
 
@@ -231,18 +251,16 @@ glm::vec3 toPos(uint pChildIndex) {
 uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount) {
   bool allZero = true;
   bool allOne = true;
-  uint total = pCompletedCount + pNodeSize * pNodeSize * pNodeSize;
+  uint volume = pNodeSize * pNodeSize * pNodeSize;
+  uint total = pCompletedCount + volume;
   // {
     // VMesh::ScopedTimer t("Scanning");
     for (uint x = pNodeOrigin.x; x < pNodeOrigin.x + pNodeSize; ++x) {
       for (uint y = pNodeOrigin.y; y < pNodeOrigin.y + pNodeSize; ++y) {
-        for (uint z = pNodeOrigin.z; z < pNodeOrigin.z + pNodeSize; ++z) {
+        for (uint z = pNodeOrigin.z; z < pNodeOrigin.z + pNodeSize && (allOne || allZero); ++z,++pCompletedCount) {
           const bool& v = pVoxelData[x][y][z];
           allZero = allZero && v == 0;
           allOne = allOne && v == 1;
-          if (!allOne && !allZero)
-            break;
-          ++pCompletedCount;
         }
       }
     }
@@ -250,7 +268,7 @@ uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std:
   pCompletedCount = total;
 
   if (allZero || allOne)
-    pCompletedCount += std::log2(pNodeSize) * pNodeSize * pNodeSize * pNodeSize;
+    pCompletedCount += std::log2(pNodeSize) * volume;
   if (allZero)
     return 0;
   else if (allOne)
@@ -271,17 +289,12 @@ uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std:
 uint generateSVDAGBottomUp(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount) {
   bool allZero = true;
   bool allOne = true;
-  // uint total = pCompletedCount + pNodeSize * pNodeSize * pNodeSize;
   for (uint x = pNodeOrigin.x; x < pNodeOrigin.x + pNodeSize; ++x) {
     for (uint y = pNodeOrigin.y; y < pNodeOrigin.y + pNodeSize; ++y) {
-      for (uint z = pNodeOrigin.z; z < pNodeOrigin.z + pNodeSize; ++z) {
-        if (pVoxelData[x][y][z] != 0)
-          allZero = false;
-        if (pVoxelData[x][y][z] != 1)
-          allOne = false;
-        if (!allOne && !allZero)
-          break;
-        // ++pCompletedCount;
+      for (uint z = pNodeOrigin.z; z < pNodeOrigin.z + pNodeSize && (allOne || allZero); ++z) {
+        const bool& v = pVoxelData[x][y][z];
+        allZero = allZero && v == 0;
+        allOne = allOne && v == 1;
       }
     }
   }
