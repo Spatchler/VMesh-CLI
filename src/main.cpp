@@ -113,8 +113,6 @@ int main(int argc, char** argv) {
   // Set log stream
   VMesh::VoxelGrid voxelGrid(resolution);
 
-  std::stringstream stream;
-  voxelGrid.setLogStream(&stream);
   if (isVerbose)
     voxelGrid.setLogStream(&std::cout);
 
