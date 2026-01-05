@@ -13,6 +13,7 @@ Options:
   -S [ --svdag ]                   generate a Sparse Voxel DAG instead of a normal voxel grid
   -R [ --resolution ] arg (=128)   set voxel grid resolution
   --scale-mode arg (=proportional) scaling mode either (proportional, stretch, none)
+  --voxel-to-svdag                 input voxel binary file and output svdag
 ```
 
 ## Loading files
