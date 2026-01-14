@@ -13,7 +13,7 @@ namespace po = boost::program_options;
 
 glm::vec3 toPos(uint pChildIndex);
 
-uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount);
+uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount);
 
 void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pOut);
 
@@ -186,7 +186,7 @@ int main(int argc, char** argv) {
   if (!isCompressed && !isSvdag) // Uncompressed and not svdag
     voxelGrid.writeToFile(out);
   else if (isCompressed && !isSvdag) { // Compressed and not svdag
-    uint voxelsComplete = 0;
+    uint64_t voxelsComplete = 0;
     float totalInv = 1.f/voxelGrid.getVolume();
     std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, [&voxelsComplete, &totalInv](){ return voxelsComplete * totalInv; }, "Compressing");
     voxelGrid.writeToFileCompressed(out, &voxelsComplete);
@@ -208,11 +208,11 @@ glm::vec3 toPos(uint pChildIndex) {
   return pos;
 }
 
-uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint& pCompletedCount) {
+uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, const std::vector<std::vector<std::vector<bool>>>& pVoxelData, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount) {
   bool allZero = true;
   bool allOne = true;
-  uint volume = pNodeSize * pNodeSize * pNodeSize;
-  uint total = pCompletedCount + volume;
+  uint64_t volume = pNodeSize * pNodeSize * pNodeSize;
+  uint64_t total = pCompletedCount + volume;
   // {
     // VMesh::ScopedTimer t("Scanning");
     for (uint x = pNodeOrigin.x; x < pNodeOrigin.x + pNodeSize; ++x) {
@@ -264,8 +264,8 @@ void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pPath) {
 
   std::vector<std::array<uint32_t, 8>> indices;
   std::vector<std::tuple<uint, uint, glm::vec3, uint>> queue;
-  uint completedCount = 0;
-  uint total = (pGrid.getMaxDepth() + 1) * pGrid.getVolume();
+  uint64_t completedCount = 0;
+  uint64_t total = (pGrid.getMaxDepth() + 1) * pGrid.getVolume();
   float totalInv = 1.f/total;
 
   std::future<void> f = startProgressBar(&pGrid.mDefaultLogMutex, [&completedCount, &totalInv](){ return completedCount * totalInv; }, "Generating SVDAG");
@@ -287,3 +287,4 @@ void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pPath) {
 
   fout.close();
 }
+
