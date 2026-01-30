@@ -24,7 +24,7 @@ void printProgressBar(const std::string& pTitle, uint64_t* pCompletedCount, uint
   else
     std::print("\x1b[49;{}m", pPrimaryEscapeColour);
 
-  std::println("\x1b[39m {}%, [ {} / {} ]", std::floor(progress*100), *pCompletedCount, pTotal); // Reset
+  std::println("\x1b[39m {}%, [ {} / {} ]", std::ceil(progress*100), *pCompletedCount, pTotal); // Reset
 }
 
 static bool checkIfDoneForTime(uint64_t* pCompletedCount, uint64_t pTotal, std::chrono::duration<double, std::milli> pDuration) {
