@@ -1,8 +1,11 @@
 #include "progressBar.hpp"
 
-void printProgressBar(const std::string& pTitle, uint64_t* pCompletedCount, uint64_t pTotal, float pTotalInv, uint8_t pPrimaryEscapeColour, uint8_t pSecondaryEscapeColour, uint pWidth) {
+void printProgressBar(const std::string& pTitle, uint64_t* pCompletedCount, uint64_t pTotal, float pTotalInv, std::mutex* pSTDOUTMutex, uint8_t pPrimaryEscapeColour, uint8_t pSecondaryEscapeColour, uint pWidth) {
+  std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
+
   float progress = *pCompletedCount * pTotalInv;
-  std::print("\x1b[1F\x1b[2K{} ", pTitle);
+  // std::print("\x1b[1F\x1b[2K{}: ", pTitle);
+  std::print("{}: ", pTitle);
   // std::print("\x1b 8\x1b 7{} ", pTitle);
   float threshold = std::ceil(progress * pWidth);
 
@@ -21,41 +24,31 @@ void printProgressBar(const std::string& pTitle, uint64_t* pCompletedCount, uint
 
     std::print("\x1b[49m");
   }
-  else
-    std::print("\x1b[49;{}m", pPrimaryEscapeColour);
+  else std::print("\x1b[49;{}m", pPrimaryEscapeColour);
 
-  std::println("\x1b[39m {}%, [ {} / {} ]", std::ceil(progress*100), *pCompletedCount, pTotal); // Reset
+  // std::println("\x1b[39m {}%, [ {} / {} ]", std::ceil(progress*100), *pCompletedCount, pTotal); // Reset
+  std::print("\x1b[39m {}%, [ {} / {} ]\r", std::ceil(progress*100), *pCompletedCount, pTotal); // Reset
+
+  std::cout.flush();
 }
 
 static bool checkIfDoneForTime(uint64_t* pCompletedCount, uint64_t pTotal, std::chrono::duration<double, std::milli> pDuration) {
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
-  while (std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - startTime).count() < pDuration.count()) {
-    if (*pCompletedCount == pTotal)
-      return true;
-  }
+  while (std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - startTime).count() < pDuration.count())
+    if (*pCompletedCount == pTotal) return true;
   return false;
 }
 
 void printProgressBarUntilDone(std::mutex* pSTDOUTMutex, const std::string& pTitle, uint64_t* pCompletedCount, uint64_t pTotal, uint8_t pPrimaryEscapeColour, uint8_t pSecondaryEscapeColour, uint pWidth) {
   float totalInv = 1.f/pTotal;
+  printProgressBar(pTitle, pCompletedCount, pTotal, totalInv, pSTDOUTMutex, pPrimaryEscapeColour, pSecondaryEscapeColour, pWidth);
+  while (!checkIfDoneForTime(pCompletedCount, pTotal, std::chrono::milliseconds(1000)))
+    printProgressBar(pTitle, pCompletedCount, pTotal, totalInv, pSTDOUTMutex, pPrimaryEscapeColour, pSecondaryEscapeColour, pWidth);
+  printProgressBar(pTitle, pCompletedCount, pTotal, totalInv, pSTDOUTMutex, pPrimaryEscapeColour, pSecondaryEscapeColour, pWidth);
   {
     std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
-    std::println("\x1b[s");
-  }
-  for (;;) {
-    {
-      std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
-      printProgressBar(pTitle, pCompletedCount, pTotal, totalInv, pPrimaryEscapeColour, pSecondaryEscapeColour, pWidth);
-    }
-    if (checkIfDoneForTime(pCompletedCount, pTotal, std::chrono::milliseconds(1000))) {
-      std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
-      printProgressBar(pTitle, pCompletedCount, pTotal, totalInv, pPrimaryEscapeColour, pSecondaryEscapeColour, pWidth);
-      break;
-    }
-  }
-  {
-    std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
-    std::println("Finished {}", pTitle);
+    // std::println("Finished {}", pTitle);
+    std::println("");
   }
 }
 
