@@ -2,6 +2,7 @@
 #include "VMesh/voxelGrid.hpp"
 
 #include "progressBar.hpp"
+#include "octree.hpp"
 
 #include <array>
 #include <vector>
@@ -13,7 +14,9 @@ namespace po = boost::program_options;
 
 glm::vec3 toPos(uint pChildIndex);
 
-uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, VMesh::VoxelGrid& pGrid, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount);
+uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, VMesh::VoxelGrid& pGrid, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount);
+
+uint generateOctreeToDepth(std::vector<std::array<uint32_t, 8>>& pIndices, std::vector<std::tuple<uint, uint>>& pQueue, uint pCurrentDepth);
 
 void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pOut);
 
@@ -187,24 +190,22 @@ int main(int argc, char** argv) {
 
   // Generate
   if (isSvdag) {
-    uint64_t trisComplete = 0;
     uint subdivisionSize = resolution >> subdivisionlevel;
     uint numSubdivisions = resolution / subdivisionSize;
     numSubdivisions = numSubdivisions * numSubdivisions * numSubdivisions;
-    std::vector<std::array<uint32_t, 8>> indices;
 
-    // for (uint i = 0; i < subdivisionlevel; ++i) {
-      // indices.push_back();
-    // }
+    SparseVoxelOctree parentSVO(resolution);
 
-    uint subdivision = 1;
-    for (glm::uvec3 o; o.x <= subdivisionlevel; ++o.x) for (o.y = 0; o.y <= subdivisionlevel; ++o.y) for (o.z = 0; o.z <= subdivisionlevel; ++o.z, ++subdivision) {
-      std::println("Subdivision: {}/{}", subdivision, numSubdivisions);
+    uint subdivision = 0;
+    for (glm::uvec3 o(0); o.x <= subdivisionlevel; ++o.x) for (o.y = 0; o.y <= subdivisionlevel; ++o.y) for (o.z = 0; o.z <= subdivisionlevel; ++o.z, ++subdivision) {
+      VMesh::Timer t;
+      std::println("Subdivision: {}/{}", subdivision + 1, numSubdivisions);
 
       VMesh::VoxelGrid grid(subdivisionSize);
-      grid.setOrigin(glm::vec3(o.x * subdivisionSize, o.y * subdivisionSize, o.z * subdivisionSize));
+      glm::vec3 origin = glm::vec3(o.x * subdivisionSize, o.y * subdivisionSize, o.z * subdivisionSize);
+      grid.setOrigin(origin);
 
-      trisComplete = 0;
+      uint64_t trisComplete = 0;
       std::future<void> f = startProgressBar(&grid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
 
       if (isDDA)
@@ -212,44 +213,32 @@ int main(int argc, char** argv) {
       else
         grid.voxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
 
-      std::vector<std::tuple<uint, uint, glm::vec3, uint>> queue;
+      grid.setOrigin();
+
       uint64_t completedCount = 0;
-      uint64_t total = (grid.getMaxDepth() + 1) * grid.getVolume();
-      float totalInv = 1.f/total;
-
+      uint64_t total = grid.getMaxDepth() * grid.getVolume();
       f = startProgressBar(&grid.mDefaultLogMutex, "Generating SVDAG", &completedCount, total);
+      SparseVoxelOctree svo(grid, &completedCount);
+      parentSVO.attachSVO(svo, origin);
 
-      {
-        uint i = generateSVDAGTopDown(indices, grid, glm::vec3(0, 0, 0), subdivisionSize, queue, completedCount);
-        if (i <= 1)
-          indices.push_back({i, i, i, i, i, i, i, i});
-      }
-      uint queueIndex = 0;
-
-      while (queueIndex < queue.size()) {
-        auto queueItem = queue.at(queueIndex);
-        indices.at(std::get<0>(queueItem)).at(std::get<1>(queueItem)) = generateSVDAGTopDown(indices, grid, std::get<2>(queueItem), std::get<3>(queueItem), queue, completedCount);
-        if (std::get<0>(queueItem) >= UINT_MAX) {
-          std::lock_guard<std::mutex> lock(grid.mDefaultLogMutex);
-          std::println("\r\e2KIndices overflow");
-        }
-        ++queueIndex;
-        // if (queueIndex >= 10000000) { // 228mb
-        if (queueIndex >= 4369067) { // 100mb
-          {
-            std::lock_guard<std::mutex> lock(grid.mDefaultLogMutex);
-            // Queue item size: 24 bytes
-            // 24 * 10000000 / 1024 / 1024 = 228
-            // 24 * 4369067 / 1024 / 1024 = 100
-            std::println("\r\e[2KClearing 100mb recursion stack", sizeof(queue.at(0)) * queueIndex);
-          }
-          queue.erase(queue.begin(), queue.begin() + queueIndex);
-          queueIndex = 0;
-        }
-      }
+      f.wait();
+      std::println("Subdivision: {}/{} took {}", subdivision + 1, numSubdivisions, t.getTime());
     }
 
-    // writeSVDAG(voxelGrid, out);
+    std::println("Writing");
+    std::ofstream fout;
+    fout.open(out, std::ios::out | std::ios::binary);
+    if (!fout.is_open())
+      throw "Could not open output file";
+
+    fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint32_t));
+
+    std::vector<std::array<uint32_t, 8>> indices = parentSVO.generateIndices();
+    uint32_t indicesSize = indices.size();
+    fout.write(reinterpret_cast<char*>(&indicesSize), sizeof(uint32_t));
+    fout.write(reinterpret_cast<char*>(&indices.at(0)), indices.size() * 8 * sizeof(uint32_t));
+
+    fout.close();
     
     std::println("Complete");
     return 0;
@@ -288,7 +277,7 @@ glm::vec3 toPos(uint pChildIndex) {
   return pos;
 }
 
-uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, VMesh::VoxelGrid& pGrid, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount) {
+uint generateSVDAGTopDown(std::vector<std::array<uint32_t, 8>>& pIndices, VMesh::VoxelGrid& pGrid, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount) {
   bool allZero = true;
   bool allOne = true;
   uint64_t volume = static_cast<uint64_t>(pNodeSize) * pNodeSize * pNodeSize;
@@ -307,17 +296,26 @@ uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, VMesh::Vox
 
   if (allZero || allOne)
     pCompletedCount += std::log2(pNodeSize) * volume;
-  if (allZero)
-    return 0;
-  else if (allOne)
-    return 1;
+
+  if (allZero) return 0;
+  if (allOne)  return 1;
 
   pNodeSize = pNodeSize >> 1;
 
   pIndices.emplace_back();
   for (uint i = 0; i < 8; ++i)
-    pQueue.push_back({pIndices.size()-1, i, pNodeOrigin + (float)pNodeSize * toPos(i), pNodeSize});
+    pQueue.push_back({pIndices.size()-1 + i, pNodeOrigin + (float)pNodeSize * toPos(i), pNodeSize});
 
+  return pIndices.size() + 1;
+}
+
+uint generateOctreeToDepth(std::vector<std::array<uint32_t, 8>>& pIndices, std::vector<std::tuple<uint, uint>>& pQueue, uint pCurrentDepth) {
+  ++pCurrentDepth;
+  pIndices.emplace_back();
+  for (uint i = 0; i < 8; ++i)
+    pIndices.back()[i] = pIndices.size() + i;
+  for (uint i = 0; i < 8; ++i)
+    pQueue.push_back({pIndices.size()-1 + i, pCurrentDepth});
   return pIndices.size() + 1;
 }
 
@@ -338,7 +336,7 @@ void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pPath) {
   // const std::vector<char>& voxelData = voxelGrid.getVoxelDataBytes();
 
   std::vector<std::array<uint32_t, 8>> indices;
-  std::vector<std::tuple<uint, uint, glm::vec3, uint>> queue;
+  std::vector<std::tuple<uint, glm::vec3, uint>> queue;
   uint64_t completedCount = 0;
   uint64_t total = (pGrid.getMaxDepth() + 1) * pGrid.getVolume();
   float totalInv = 1.f/total;
@@ -354,7 +352,7 @@ void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pPath) {
 
   while (queueIndex < queue.size()) {
     auto queueItem = queue.at(queueIndex);
-    indices.at(std::get<0>(queueItem)).at(std::get<1>(queueItem)) = generateSVDAGTopDown(indices, pGrid, std::get<2>(queueItem), std::get<3>(queueItem), queue, completedCount);
+    indices.at(std::get<0>(queueItem) >> 3).at(std::get<0>(queueItem) & 0b111) = generateSVDAGTopDown(indices, pGrid, std::get<1>(queueItem), std::get<2>(queueItem), queue, completedCount);
     if (std::get<0>(queueItem) >= UINT_MAX) {
       std::lock_guard<std::mutex> lock(pGrid.mDefaultLogMutex);
       std::println("\r\e2KIndices overflow");
@@ -365,7 +363,6 @@ void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pPath) {
       {
         std::lock_guard<std::mutex> lock(pGrid.mDefaultLogMutex);
         // Queue item size: 24 bytes
-        // 24 * 10000000 / 1024 / 1024 = 228
         // 24 * 4369067 / 1024 / 1024 = 100
         std::println("\r\e[2KClearing 100mb recursion stack", sizeof(queue.at(0)) * queueIndex);
       }
