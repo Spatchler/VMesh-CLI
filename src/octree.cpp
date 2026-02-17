@@ -5,6 +5,7 @@ Node* Node::sAir = new Node(true, true, 0, glm::uvec3(0));
 
 Node::Node(bool pIsLeaf, bool pIsAir, uint pSize, glm::uvec3 pOrigin)
 :isLeaf(pIsLeaf), isAir(pIsAir), size(pSize), origin(pOrigin) {
+  // std::println("Constructing node with origin: {}, {}, {}", origin.x, origin.y, origin.z);
   children = {sAir, sAir, sAir, sAir, sAir, sAir, sAir, sAir};
 }
 
@@ -26,7 +27,8 @@ void Node::evaluateChildrenIndices(std::vector<std::array<uint32_t, 8>>& pIndice
 
 void Node::generate(VMesh::VoxelGrid& pGrid, std::vector<Node*>& pQueue, uint64_t& pCompletedCount) {
   uint childSize = size >> 1;
-  uint64_t childVolume = static_cast<uint64_t>(childSize) * childSize * childSize;
+  uint64_t childVolume = childSize;
+  childVolume = childVolume * childVolume * childVolume;
 
   if (childSize == 0) return;
 
@@ -101,16 +103,13 @@ void SparseVoxelOctree::attachSVO(SparseVoxelOctree& pSVO, const glm::uvec3& pOr
     mRootNode = pSVO.mRootNode;
     return;
   }
-  Node** node = &mRootNode->children[Node::toChildIndex(pOrigin / (mSize >> 1))];
-  for (uint nodeSize = mSize >> 1; nodeSize > pSVO.mSize; nodeSize >> 1) {
+  Node** node = &mRootNode;
+  for (uint nodeSize = mSize >> 1; nodeSize >= pSVO.mSize; nodeSize >>= 1) {
     glm::uvec3 o = pOrigin - (*node)->origin;
-    uint8_t childIndex = Node::toChildIndex(o / (nodeSize >> 1));
-    if ((*node)->isLeaf)
-      (*node)->children[childIndex] = new Node(false, false, nodeSize, o / (nodeSize >> 1));
+    node = &(*node)->children[Node::toChildIndex(o / nodeSize)];
+    if ((*node)->isLeaf || !*node)
+      *node = new Node(false, false, nodeSize, (*node)->origin + o / nodeSize * nodeSize);
     (*node)->isLeaf = false;
-    // (*node)->size = nodeSize;
-    // (*node)->origin = o / (nodeSize >> 1);
-    (*node) = (*node)->children[childIndex];
   }
   *node = pSVO.mRootNode;
 }

@@ -1,3 +1,16 @@
+
+
+
+
+
+// Add proper pallete support to octree files
+
+
+
+
+
+
+
 #include "VMesh/model.hpp"
 #include "VMesh/voxelGrid.hpp"
 
@@ -193,11 +206,12 @@ int main(int argc, char** argv) {
     uint subdivisionSize = resolution >> subdivisionlevel;
     uint numSubdivisions = resolution / subdivisionSize;
     numSubdivisions = numSubdivisions * numSubdivisions * numSubdivisions;
+    uint subdimensions = 1 << subdivisionlevel;
 
     SparseVoxelOctree parentSVO(resolution);
 
     uint subdivision = 0;
-    for (glm::uvec3 o(0); o.x <= subdivisionlevel; ++o.x) for (o.y = 0; o.y <= subdivisionlevel; ++o.y) for (o.z = 0; o.z <= subdivisionlevel; ++o.z, ++subdivision) {
+    for (glm::uvec3 o(0); o.x < subdimensions; ++o.x) for (o.y = 0; o.y < subdimensions; ++o.y) for (o.z = 0; o.z < subdimensions; ++o.z, ++subdivision) {
       VMesh::Timer t;
       std::println("Subdivision: {}/{}", subdivision + 1, numSubdivisions);
 
@@ -208,10 +222,8 @@ int main(int argc, char** argv) {
       uint64_t trisComplete = 0;
       std::future<void> f = startProgressBar(&grid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
 
-      if (isDDA)
-        grid.DDAvoxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
-      else
-        grid.voxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
+      if (isDDA) grid.DDAvoxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
+      else       grid.voxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
 
       grid.setOrigin();
 
@@ -219,21 +231,22 @@ int main(int argc, char** argv) {
       uint64_t total = grid.getMaxDepth() * grid.getVolume();
       f = startProgressBar(&grid.mDefaultLogMutex, "Generating SVDAG", &completedCount, total);
       SparseVoxelOctree svo(grid, &completedCount);
+      f.wait();
       parentSVO.attachSVO(svo, origin);
 
-      f.wait();
       std::println("Subdivision: {}/{} took {}", subdivision + 1, numSubdivisions, t.getTime());
     }
+
+    std::println("Generating indices");
+    std::vector<std::array<uint32_t, 8>> indices = parentSVO.generateIndices();
 
     std::println("Writing");
     std::ofstream fout;
     fout.open(out, std::ios::out | std::ios::binary);
-    if (!fout.is_open())
-      throw "Could not open output file";
+    if (!fout.is_open()) throw "Could not open output file";
 
     fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint32_t));
 
-    std::vector<std::array<uint32_t, 8>> indices = parentSVO.generateIndices();
     uint32_t indicesSize = indices.size();
     fout.write(reinterpret_cast<char*>(&indicesSize), sizeof(uint32_t));
     fout.write(reinterpret_cast<char*>(&indices.at(0)), indices.size() * 8 * sizeof(uint32_t));
