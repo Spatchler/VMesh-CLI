@@ -22,7 +22,12 @@ Options:
 ## Loading files
 ### SVDAGs:
 An SVDAG file is an array of uint32s. In the order: resolution, palette size, indices size, indices.
+
 Palette size does not include air.
+
+UINT_MAX - palette size = air index
+
+Anything greater than air index is an index for the palette. Anything below points is a child index.
 
 Example:
 ```cpp
@@ -46,6 +51,8 @@ fin.read(reinterpret_cast<char*>(&numIndices), 4);
 // Load indices
 indices.resize(numIndices);
 fin.read(reinterpret_cast<char*>(&indices[0]), sizeof(indices[0]) * indices.size());
+
+fin.close();
 ```
 
 ## Dependencies:
