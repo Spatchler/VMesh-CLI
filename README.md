@@ -18,33 +18,31 @@ Options:
 
 ## Loading files
 ### SVDAGs:
-An SVDAG file is an array of uint32s. The first uint32 is the resolution and then from there are the indices. A value of 0 means air and a value of 1 means a solid voxel. Every value above 1 is an index for the array which you have to subtract 2 from.
+An SVDAG file is an array of uint32s. In the order: resolution, palette size, indices size, indices.
+Palette size does not include air.
 
 Example:
 ```cpp
 // Output variables
-uint32_t resolution;
+uint32_t resolution, paletteSize, numIndices;
 std::vector<std::array<uint32_t, 8>> indices;
 
-// Load file
+// Open file
 std::ifstream fin;
-fin.open(path, std::ios::binary | std::ios::in);
+fin.open("file.bin", std::ios::binary | std::ios::in);
 
 // Read resolution
-fin.read(reinterpret_cast<char*>(&resolution), sizeof(uint32_t));
+fin.read(reinterpret_cast<char*>(&resolution), 4);
+
+// Read palette size
+fin.read(reinterpret_cast<char*>(&paletteSize), 4);
+
+// Read num indices
+fin.read(reinterpret_cast<char*>(&numIndices), 4);
 
 // Load indices
-uint32_t value;
-uint i = 0;
-std::array<uint32_t, 8> node;
-while (fin.read(reinterpret_cast<char*>(&value), sizeof(uint32_t))) {
-  node[i] = value;
-  ++i;
-  if (i == 8) {
-    indices.push_back(node);
-    i = 0;
-  }
-}
+indices.resize(numIndices);
+fin.read(reinterpret_cast<char*>(&indices[0]), sizeof(indices[0]) * indices.size());
 ```
 
 ## Dependencies:
