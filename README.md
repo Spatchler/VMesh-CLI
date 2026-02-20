@@ -27,7 +27,7 @@ Palette size does not include air.
 
 UINT_MAX - palette size = air index
 
-Anything greater than air index is an index for the palette. Anything below points is a child index.
+Anything greater than air index is an index for the palette. Anything below is a child index.
 
 Example:
 ```cpp
