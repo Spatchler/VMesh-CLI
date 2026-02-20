@@ -19,9 +19,9 @@ void Node::createChildren(std::vector<std::array<uint32_t, 8>>& pIndices, std::v
 
 void Node::evaluateChildrenIndices(std::vector<std::array<uint32_t, 8>>& pIndices) {
   for (uint i = 0; i < 8; ++i) {
-    if (!children[i]->isLeaf)    pIndices[index][i] = children[i]->index + 2;
-    else if (children[i]->isAir) pIndices[index][i] = 0;
-    else                         pIndices[index][i] = 1;
+    if (!children[i]->isLeaf)    pIndices[index][i] = children[i]->index;
+    else if (children[i]->isAir) pIndices[index][i] = UINT_MAX - 1;
+    else                         pIndices[index][i] = UINT_MAX;
   }
 }
 
@@ -105,10 +105,10 @@ void SparseVoxelOctree::attachSVO(SparseVoxelOctree& pSVO, const glm::uvec3& pOr
   }
   Node** node = &mRootNode;
   for (uint nodeSize = mSize >> 1; nodeSize >= pSVO.mSize; nodeSize >>= 1) {
-    glm::uvec3 o = pOrigin - (*node)->origin;
-    node = &(*node)->children[Node::toChildIndex(o / nodeSize)];
+    glm::uvec3 o = (pOrigin - (*node)->origin) / nodeSize;
+    node = &(*node)->children[Node::toChildIndex(o)];
     if ((*node)->isLeaf || !*node)
-      *node = new Node(false, false, nodeSize, (*node)->origin + o / nodeSize * nodeSize);
+      *node = new Node(false, false, nodeSize, (*node)->origin + o * nodeSize);
     (*node)->isLeaf = false;
   }
   *node = pSVO.mRootNode;

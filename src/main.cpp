@@ -3,7 +3,7 @@
 
 
 
-// Add proper pallete support to octree files
+// Add pallete support to octree files
 
 
 
@@ -93,10 +93,8 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  if (vm.count("verbose"))
-    isVerbose = true;
-  if (vm.count("compressed"))
-    isCompressed = true;
+  if (vm.count("verbose")) isVerbose = true;
+  if (vm.count("compressed")) isCompressed = true;
 
   if (!vm.count("in")) {
     std::println("Missing input file path, use -h for help");
@@ -107,19 +105,14 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  if (vm.count("svdag"))
-    isSvdag = true;
-
   if (scaleMode != "proportional" && scaleMode != "stretch" && scaleMode != "none") {
     std::println("Invalid scale mode, use -h for help");
     return 1;
   }
 
-  if (vm.count("voxel-to-svdag"))
-    isConvert = true;
-
-  if (vm.count("DDA"))
-    isDDA = true;
+  if (vm.count("svdag")) isSvdag = true;
+  if (vm.count("voxel-to-svdag")) isConvert = true;
+  if (vm.count("DDA")) isDDA = true;
 
   float logRes = std::log2f(resolution);
   if (isSvdag && logRes != std::ceil(logRes) && logRes != std::floor(logRes)) {
@@ -142,15 +135,11 @@ int main(int argc, char** argv) {
   // ############
 
   std::string compressedStr = "uncompressed";
-  if (isCompressed)
-    compressedStr = "compressed";
+  if (isCompressed) compressedStr = "compressed";
 
-  if (isConvert)
-    std::println("Converting uncompressed Voxel Data to Sparse Voxel Octree");
-  else if (isSvdag)
-    std::println("Generating {0} Sparse Voxel Octree of resolution {1}", compressedStr, resolution);
-  else
-    std::println("Generating {0} Voxel Data of resolution {1}", compressedStr, resolution);
+  if (isConvert) std::println("Converting uncompressed Voxel Data to Sparse Voxel Octree");
+  else if (isSvdag) std::println("Generating {0} Sparse Voxel Octree of resolution {1}", compressedStr, resolution);
+  else std::println("Generating {0} Voxel Data of resolution {1}", compressedStr, resolution);
 
   // Convert
   if (isConvert) {
@@ -192,7 +181,7 @@ int main(int argc, char** argv) {
   glm::mat4 m(1.0f);
   if (scaleMode == "stretch")
     m = glm::scale(m, glm::vec3(resolution-1, resolution-1, resolution-1) / (largest + (glm::vec3(0, 0, 0) - smallest)) );
-  if (scaleMode == "proportional") {
+  else if (scaleMode == "proportional") {
     glm::vec3 vec(glm::vec3(resolution-1, resolution-1, resolution-1) / (largest + (glm::vec3(0, 0, 0) - smallest)));
     float v = std::min(vec.x, std::min(vec.y, vec.z));
     m = glm::scale(m,  glm::vec3(v, v, v));
@@ -246,6 +235,8 @@ int main(int argc, char** argv) {
     if (!fout.is_open()) throw "Could not open output file";
 
     fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint32_t));
+    uint32_t paletteSize = 1;
+    fout.write(reinterpret_cast<char*>(&paletteSize), sizeof(uint32_t));
 
     uint32_t indicesSize = indices.size();
     fout.write(reinterpret_cast<char*>(&indicesSize), sizeof(uint32_t));
