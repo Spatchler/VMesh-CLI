@@ -7,13 +7,16 @@ A CLI tool to generate voxel data from a triangle mesh using my C++ library [`VM
 Usage: vmesh OPTIONS input-path output-path
 
 Options:
-  -h [ --help ]                    produce help message
-  -v [ --verbose ]                 verbose output
-  -C [ --compressed ]              compress voxel data
-  -S [ --svdag ]                   generate a Sparse Voxel DAG instead of a normal voxel grid
-  -R [ --resolution ] arg (=128)   set voxel grid resolution
-  --scale-mode arg (=proportional) scaling mode either (proportional, stretch, none)
-  --voxel-to-svdag                 input voxel binary file and output svdag
+  -h [ --help ]                       produce help message
+  -v [ --verbose ]                    verbose output
+  -C [ --compressed ]                 compress voxel data
+  -S [ --svdag ]                      generate a Sparse Voxel Octree instead of a normal voxel grid
+  -R [ --resolution ] arg (=128)      set voxel grid resolution
+  -L [ --subdivision-level ] arg (=0) set depth to generate initial subtrees before combining
+  --scale-mode arg (=proportional)    scaling mode either (proportional, stretch, none)
+  --voxel-to-svdag                    input voxel binary file and output svdag
+  --DDA                               use DDA voxelization algorithm instead of triangle box 
+                                      intersections, it tends to be faster on higher resolutions
 ```
 
 ## Loading files
