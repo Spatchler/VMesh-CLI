@@ -1,16 +1,3 @@
-
-
-
-
-
-// Add pallete support to octree files
-
-
-
-
-
-
-
 #include "VMesh/model.hpp"
 #include "VMesh/voxelGrid.hpp"
 
@@ -19,19 +6,13 @@
 
 #include <array>
 #include <vector>
-#include <boost/program_options.hpp>
 #include <iostream>
 #include <fstream>
 
+#include <boost/program_options.hpp>
+#include <thread_pool/thread_pool.h>
+
 namespace po = boost::program_options;
-
-glm::vec3 toPos(uint pChildIndex);
-
-uint generateSVDAGTopDown(std::vector<std::array<uint, 8>>& pIndices, VMesh::VoxelGrid& pGrid, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount);
-
-uint generateOctreeToDepth(std::vector<std::array<uint32_t, 8>>& pIndices, std::vector<std::tuple<uint, uint>>& pQueue, uint pCurrentDepth);
-
-void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pOut);
 
 int main(int argc, char** argv) {
   uint resolution;
@@ -144,13 +125,10 @@ int main(int argc, char** argv) {
   // Convert
   if (isConvert) {
     VMesh::VoxelGrid voxelGrid(resolution);
-
     voxelGrid.loadFromFile(in);
-
     resolution = voxelGrid.getResolution();
-
-    writeSVDAG(voxelGrid, out);
-
+    SparseVoxelOctree svo(voxelGrid);
+    svo.write(out);
     std::println("Complete");
     return 0;
   }
@@ -205,7 +183,7 @@ int main(int argc, char** argv) {
       std::println("Subdivision: {}/{}", subdivision + 1, numSubdivisions);
 
       VMesh::VoxelGrid grid(subdivisionSize);
-      glm::vec3 origin = glm::vec3(o.x * subdivisionSize, o.y * subdivisionSize, o.z * subdivisionSize);
+      glm::uvec3 origin(o.x * subdivisionSize, o.y * subdivisionSize, o.z * subdivisionSize);
       grid.setOrigin(origin);
 
       uint64_t trisComplete = 0;
@@ -226,23 +204,10 @@ int main(int argc, char** argv) {
       std::println("Subdivision: {}/{} took {}", subdivision + 1, numSubdivisions, t.getTime());
     }
 
-    std::println("Generating indices");
-    std::vector<std::array<uint32_t, 8>> indices = parentSVO.generateIndices();
+    parentSVO.write(out);
 
-    std::println("Writing");
-    std::ofstream fout;
-    fout.open(out, std::ios::out | std::ios::binary);
-    if (!fout.is_open()) throw "Could not open output file";
-
-    fout.write(reinterpret_cast<char*>(&resolution), sizeof(uint32_t));
-    uint32_t paletteSize = 1;
-    fout.write(reinterpret_cast<char*>(&paletteSize), sizeof(uint32_t));
-
-    uint32_t indicesSize = indices.size();
-    fout.write(reinterpret_cast<char*>(&indicesSize), sizeof(uint32_t));
-    fout.write(reinterpret_cast<char*>(&indices.at(0)), indices.size() * 8 * sizeof(uint32_t));
-
-    fout.close();
+    parentSVO.destroy();
+    Node::destroy();
     
     std::println("Complete");
     return 0;
@@ -251,18 +216,15 @@ int main(int argc, char** argv) {
   // Set log stream
   VMesh::VoxelGrid voxelGrid(resolution);
 
-  if (isVerbose)
-    voxelGrid.setLogStream(&std::cout);
+  if (isVerbose) voxelGrid.setLogStream(&std::cout);
 
   // Voxelize
   uint64_t trisComplete = 0;
-  if (isDDA)
-    voxelGrid.DDAvoxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
-  else
-    voxelGrid.voxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
+  if (isDDA) voxelGrid.DDAvoxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
+  else voxelGrid.voxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
 
-  if (!isCompressed && !isSvdag) // Uncompressed and not svdag
-    voxelGrid.writeToFile(out);
+  // Uncompressed and not svdag
+  if (!isCompressed && !isSvdag) voxelGrid.writeToFile(out);
   else if (isCompressed && !isSvdag) { // Compressed and not svdag
     uint64_t voxelsComplete = 0;
     std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Compressing", &voxelsComplete, voxelGrid.getVolume());
@@ -271,115 +233,5 @@ int main(int argc, char** argv) {
 
   std::println("Complete");
   return 0;
-}
-
-glm::vec3 toPos(uint pChildIndex) {
-  glm::vec3 pos;
-  pos.x = 1 & pChildIndex;
-  pos.y = ((1 << 1) & pChildIndex) != 0;
-  pos.z = ((1 << 2) & pChildIndex) != 0;
-  return pos;
-}
-
-uint generateSVDAGTopDown(std::vector<std::array<uint32_t, 8>>& pIndices, VMesh::VoxelGrid& pGrid, glm::vec3 pNodeOrigin, uint pNodeSize, std::vector<std::tuple<uint, glm::vec3, uint>>& pQueue, uint64_t& pCompletedCount) {
-  bool allZero = true;
-  bool allOne = true;
-  uint64_t volume = static_cast<uint64_t>(pNodeSize) * pNodeSize * pNodeSize;
-  uint64_t total = pCompletedCount + volume;
-
-  for (uint z = pNodeOrigin.z; z < pNodeOrigin.z + pNodeSize; ++z)
-    for (uint y = pNodeOrigin.y; y < pNodeOrigin.y + pNodeSize; ++y)
-      for (uint x = pNodeOrigin.x; x < pNodeOrigin.x + pNodeSize && (allOne || allZero); ++x,++pCompletedCount) {
-        // const bool& v = pVoxelData[x][y][z];
-        const bool v = pGrid.queryVoxel(glm::vec3(x, y, z));
-        allZero = allZero && v == 0;
-        allOne = allOne && v == 1;
-      }
-
-  pCompletedCount = total;
-
-  if (allZero || allOne)
-    pCompletedCount += std::log2(pNodeSize) * volume;
-
-  if (allZero) return 0;
-  if (allOne)  return 1;
-
-  pNodeSize = pNodeSize >> 1;
-
-  pIndices.emplace_back();
-  for (uint i = 0; i < 8; ++i)
-    pQueue.push_back({pIndices.size()-1 + i, pNodeOrigin + (float)pNodeSize * toPos(i), pNodeSize});
-
-  return pIndices.size() + 1;
-}
-
-uint generateOctreeToDepth(std::vector<std::array<uint32_t, 8>>& pIndices, std::vector<std::tuple<uint, uint>>& pQueue, uint pCurrentDepth) {
-  ++pCurrentDepth;
-  pIndices.emplace_back();
-  for (uint i = 0; i < 8; ++i)
-    pIndices.back()[i] = pIndices.size() + i;
-  for (uint i = 0; i < 8; ++i)
-    pQueue.push_back({pIndices.size()-1 + i, pCurrentDepth});
-  return pIndices.size() + 1;
-}
-
-void writeSVDAG(VMesh::VoxelGrid& pGrid, const std::string& pPath) {
-  std::ofstream fout;
-
-  fout.open(pPath, std::ios::out | std::ios::binary);
-  if (!fout.is_open())
-    throw "Could not open output file";
-
-  uint res = pGrid.getResolution();
-
-  // Write resolution metadata
-  fout.write(reinterpret_cast<char*>(&res), sizeof(uint32_t));
-
-  // SparseVoxelDAG svdag(resolution);
-  // const std::vector<std::vector<std::vector<bool>>>& voxelData = pGrid.getVoxelData();
-  // const std::vector<char>& voxelData = voxelGrid.getVoxelDataBytes();
-
-  std::vector<std::array<uint32_t, 8>> indices;
-  std::vector<std::tuple<uint, glm::vec3, uint>> queue;
-  uint64_t completedCount = 0;
-  uint64_t total = (pGrid.getMaxDepth() + 1) * pGrid.getVolume();
-  float totalInv = 1.f/total;
-
-  std::future<void> f = startProgressBar(&pGrid.mDefaultLogMutex, "Generating SVDAG", &completedCount, total);
-
-  {
-    uint i = generateSVDAGTopDown(indices, pGrid, glm::vec3(0, 0, 0), res, queue, completedCount);
-    if (i <= 1)
-      indices.push_back({i, i, i, i, i, i, i, i});
-  }
-  uint queueIndex = 0;
-
-  while (queueIndex < queue.size()) {
-    auto queueItem = queue.at(queueIndex);
-    indices.at(std::get<0>(queueItem) >> 3).at(std::get<0>(queueItem) & 0b111) = generateSVDAGTopDown(indices, pGrid, std::get<1>(queueItem), std::get<2>(queueItem), queue, completedCount);
-    if (std::get<0>(queueItem) >= UINT_MAX) {
-      std::lock_guard<std::mutex> lock(pGrid.mDefaultLogMutex);
-      std::println("\r\e2KIndices overflow");
-    }
-    ++queueIndex;
-    // if (queueIndex >= 10000000) { // 228mb
-    if (queueIndex >= 4369067) { // 100mb
-      {
-        std::lock_guard<std::mutex> lock(pGrid.mDefaultLogMutex);
-        // Queue item size: 24 bytes
-        // 24 * 4369067 / 1024 / 1024 = 100
-        std::println("\r\e[2KClearing 100mb recursion stack", sizeof(queue.at(0)) * queueIndex);
-      }
-      queue.erase(queue.begin(), queue.begin() + queueIndex);
-      queueIndex = 0;
-    }
-  }
-
-  f.wait();
-  std::println("Writing");
-
-  fout.write(reinterpret_cast<char*>(&indices.at(0)), indices.size() * 8 * sizeof(uint32_t));
-
-  fout.close();
 }
 
