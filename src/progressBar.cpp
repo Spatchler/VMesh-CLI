@@ -4,32 +4,23 @@ void printProgressBar(const std::string& pTitle, uint64_t* pCompletedCount, uint
   std::lock_guard<std::mutex> lock(*pSTDOUTMutex);
 
   float progress = *pCompletedCount * pTotalInv;
-  // std::print("\e[1F\e[2K{}: ", pTitle);
-  // std::print("\e[2k{}: ", pTitle);
   std::print("\r\e[2K{}: ", pTitle);
-  // std::print("\e 8\e 7{} ", pTitle);
   float threshold = std::ceil(progress * pWidth);
 
-  // std::print("\e[u\e[s{} ", pTitle);
-  // std::print("\r{} ", pTitle);
-  std::print("\e[{}m\e[{}m", pPrimaryEscapeColour, pPrimaryEscapeColour + 10);
+  std::print("\e[{}m", pPrimaryEscapeColour);
 
-  for (uint i = 0; i < threshold; ++i)
-    std::print(" ");
+  for (uint i = 0; i < threshold; ++i) std::print("━");
 
   if (threshold <= pWidth - 1) {
-    std::print("\e[{}m\e[{}m", pSecondaryEscapeColour + 10, pSecondaryEscapeColour);
+    std::print("╸\e[{}m", pSecondaryEscapeColour);
 
-    for (uint i = 0; i < pWidth - threshold - 1; ++i)
-      std::print(" ");
+    for (uint i = 0; i < pWidth - threshold - 1; ++i) std::print("━");
 
-    std::print("\e[49m");
+    std::print("\e[49m");
   }
-  else std::print("\e[49;{}m", pPrimaryEscapeColour);
+  else std::print("\e[49;{}m", pPrimaryEscapeColour);
 
-  // std::println("\e[39m {}%, [ {} / {} ]", std::ceil(progress*100), *pCompletedCount, pTotal); // Reset
-  // std::print("\e[39m {}%, [ {} / {} ]\r", std::ceil(progress*100), *pCompletedCount, pTotal); // Reset
-  std::print("\e[39m {}%, [ {} / {} ]", std::ceil(progress*100), *pCompletedCount, pTotal); // Reset
+  std::print("\e[39m {}%, [ {} / {} ]", std::ceil(progress * 100.f), *pCompletedCount, pTotal); // Reset
 
   std::cout << std::flush;
 }

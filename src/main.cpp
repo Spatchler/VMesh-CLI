@@ -95,12 +95,12 @@ int main(int argc, char** argv) {
   if (vm.count("voxel-to-svdag")) isConvert = true;
   if (vm.count("DDA")) isDDA = true;
 
-  float logRes = std::log2f(resolution);
-  if (isSvdag && logRes != std::ceil(logRes) && logRes != std::floor(logRes)) {
+  if (isSvdag && (!resolution || resolution & (resolution - 1))) {
     std::println("Octree resolution has to be a power of 2");
     return 1;
   }
 
+  float logRes = std::log2f(resolution);
   if (subdivisionlevel > logRes) {
     std::println("Subdivision level has to be in range cannot be greater than log2(resolution) = {}", logRes);
     return 1;
@@ -129,6 +129,8 @@ int main(int argc, char** argv) {
     resolution = voxelGrid.getResolution();
     SparseVoxelOctree svo(voxelGrid);
     svo.write(out);
+    svo.destroy();
+    Node::destroy();
     std::println("Complete");
     return 0;
   }

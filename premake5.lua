@@ -16,11 +16,11 @@ workspace "main"
         filter {"system:linux", "action:gmake"}
             buildoptions {"-g"} -- For core files
     filter "configurations:release"
-        defines {"_RELEASE"}
+        defines {"_RELEASE", "NDEBUG", "_PROFILING"}
         optimize "On"
     filter "configurations:dist"
-        defines {"_DIST"}
-        optimize "On"
+        defines {"_RELEASE", "NDEBUG", "_PROFILING"}
+        optimize "Speed"
 
     filter "system:macosx"
         defines {"_MACOSX"}

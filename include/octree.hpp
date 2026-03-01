@@ -3,6 +3,7 @@
 #include <vector>
 #include <array>
 #include <algorithm>
+#include <limits>
 #include <string>
 #include "VMesh/voxelGrid.hpp"
 
@@ -13,6 +14,7 @@ public:
   void createChildren(std::vector<std::array<uint32_t, 8>>& pIndices, std::vector<Node*>& pQueue);
   void evaluateChildrenIndices(std::vector<std::array<uint32_t, 8>>& pIndices);
   void generate(VMesh::VoxelGrid& pGrid, std::vector<Node*>& pQueue, uint64_t& pCompletedCount);
+  void generateBottomUp(VMesh::VoxelGrid& pGrid, std::vector<Node*>& pQueue, uint64_t& pCompletedCount);
 
   static uint toChildIndex(glm::uvec3 pPos);
   static glm::uvec3 toPos(uint8_t pChildIndex);

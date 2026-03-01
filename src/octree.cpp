@@ -19,8 +19,8 @@ void Node::createChildren(std::vector<std::array<uint32_t, 8>>& pIndices, std::v
 void Node::evaluateChildrenIndices(std::vector<std::array<uint32_t, 8>>& pIndices) {
   for (uint8_t i = 0; i < 8; ++i) {
     if (!children[i]->isLeaf)    pIndices[index][i] = children[i]->index;
-    else if (children[i]->isAir) pIndices[index][i] = UINT_MAX - 1;
-    else                         pIndices[index][i] = UINT_MAX;
+    else if (children[i]->isAir) pIndices[index][i] = std::numeric_limits<uint32_t>::max() - 1;
+    else                         pIndices[index][i] = std::numeric_limits<uint32_t>::max();
   }
 }
 
@@ -30,22 +30,38 @@ void Node::generate(VMesh::VoxelGrid& pGrid, std::vector<Node*>& pQueue, uint64_
   childVolume = childVolume * childVolume * childVolume;
 
   if (childSize == 0) return;
+  if (childSize == 1) {
+    for (uint i = 0; i < 8; ++i,++pCompletedCount) {
+      glm::uvec3 o = origin + toPos(i) * childSize;
+      if (pGrid.queryVoxel(o)) children[i] = sSolid;
+      else children[i] = sAir;
+    }
+    return;
+  }
 
   for (uint i = 0; i < 8; ++i) {
     uint64_t total = pCompletedCount + childVolume;
 
     glm::uvec3 o = origin + toPos(i) * childSize;
 
-    bool allZero = true;
-    bool allOne = true;
+    bool allZero = true, allOne = true;
 
-    for (uint z = o.z; z < o.z + childSize; ++z)
-      for (uint y = o.y; y < o.y + childSize; ++y)
-        for (uint x = o.x; x < o.x + childSize && (allOne || allZero); ++x,++pCompletedCount) {
-          const bool v = pGrid.queryVoxel(glm::vec3(x, y, z));
-          allZero = allZero && v == 0;
-          allOne = allOne && v == 1;
-        }
+    if (childSize == 2)
+      for (uint z = o.z; z < o.z + childSize && (allOne || allZero); z += 2)
+        for (uint y = o.y; y < o.y + childSize && (allOne || allZero); y += 2)
+          for (uint x = o.x; x < o.x + childSize && (allOne || allZero); x += 2,pCompletedCount += 8) {
+            const uint8_t* v = reinterpret_cast<uint8_t*>(pGrid.getVoxelDataByte({x, y, z}));
+            allZero = allZero && *v == 0;
+            allOne = allOne && *v == std::numeric_limits<uint8_t>::max();
+          }
+    else
+      for (uint z = o.z; z < o.z + childSize && (allOne || allZero); z += 4)
+        for (uint y = o.y; y < o.y + childSize && (allOne || allZero); y += 4)
+          for (uint x = o.x; x < o.x + childSize && (allOne || allZero); x += 4,pCompletedCount += 64) {
+            const uint64_t* v = reinterpret_cast<uint64_t*>(pGrid.getVoxelDataByte({x, y, z}));
+            allZero = allZero && *v == 0;
+            allOne = allOne && *v == std::numeric_limits<uint64_t>::max();
+          }
 
     pCompletedCount = total;
 
@@ -60,6 +76,9 @@ void Node::generate(VMesh::VoxelGrid& pGrid, std::vector<Node*>& pQueue, uint64_
     children[i] = new Node(false, false, childSize, o);
     pQueue.push_back(children[i]);
   }
+}
+
+void Node::generateBottomUp(VMesh::VoxelGrid& pGrid, std::vector<Node*>& pQueue, uint64_t& pCompletedCount) {
 }
 
 uint Node::toChildIndex(glm::uvec3 pPos) {
@@ -141,9 +160,12 @@ std::vector<std::array<uint32_t, 8>> SparseVoxelOctree::generateIndices() {
 }
 
 void SparseVoxelOctree::write(const std::string& pPath) {
+  VMesh::Timer t;
   std::println("Generating indices");
   std::vector<std::array<uint32_t, 8>> indices = generateIndices();
+  std::println("Generating indices took: {}", t.getTime());
 
+  t.start();
   std::println("Writing");
 
   std::ofstream fout;
@@ -158,6 +180,7 @@ void SparseVoxelOctree::write(const std::string& pPath) {
   fout.write(reinterpret_cast<char*>(&indices.at(0)), indices.size() * 8ull * sizeof(uint32_t));
 
   fout.close();
+  std::println("Writing took: {}", t.getTime());
 }
 
 void SparseVoxelOctree::destroy() {
