@@ -179,6 +179,10 @@ int main(int argc, char** argv) {
 
     SparseVoxelOctree parentSVO(resolution);
 
+    std::chrono::duration<double> totalVoxelizationTime;
+    std::chrono::duration<double> totalOctreeGenerationTime;
+    std::chrono::duration<double> temp;
+
     uint subdivision = 0;
     for (glm::uvec3 o(0); o.x < subdimensions; ++o.x) for (o.y = 0; o.y < subdimensions; ++o.y) for (o.z = 0; o.z < subdimensions; ++o.z, ++subdivision) {
       VMesh::Timer t;
@@ -193,6 +197,9 @@ int main(int argc, char** argv) {
 
       if (isDDA) grid.DDAvoxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
       else       grid.voxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
+
+      totalVoxelizationTime += t.getTime();
+      temp = t.getTime();
 
       if (!grid.getVoxelCount()) {
         f.wait();
@@ -209,8 +216,15 @@ int main(int argc, char** argv) {
       f.wait();
       parentSVO.attachSVO(svo, origin);
 
+      totalOctreeGenerationTime += t.getTime() - temp;
+
       std::println("Subdivision: {}/{} took {}", subdivision + 1, numSubdivisions, t.getTime());
     }
+
+    std::println("----------------------------------");
+    std::println("Total voxelization time: {}", totalVoxelizationTime);
+    std::println("Total octree generation time: {}", totalOctreeGenerationTime);
+    std::println("----------------------------------");
 
     parentSVO.write(out);
 
