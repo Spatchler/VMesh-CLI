@@ -194,6 +194,12 @@ int main(int argc, char** argv) {
       if (isDDA) grid.DDAvoxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
       else       grid.voxelizeMesh(model, reinterpret_cast<uint*>(&trisComplete));
 
+      if (!grid.getVoxelCount()) {
+        f.wait();
+        std::println("Subdivision: {}/{} took {}", subdivision + 1, numSubdivisions, t.getTime());
+        continue;
+      }
+
       grid.setOrigin();
 
       uint64_t completedCount = 0;
