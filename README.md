@@ -76,5 +76,5 @@ fin.close();
 * Boost Program Options
 
 ## Build:
-`premake5 gmake && make`
+`premake5 gmake && make config=dist`
 
