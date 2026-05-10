@@ -1,6 +1,6 @@
 # VMesh CLI
 
-A CLI tool to generate voxel data from a triangle mesh using my C++ library [`VMesh`](https://github.com/Spatchler/VMesh). The tool uses a custom file format for data and JASC-PAl for the palette. It can also do out of core generation for larger octrees.
+A CLI tool to generate voxel data from a triangle mesh using my C++ library [`VMesh`](https://github.com/Spatchler/VMesh). The tool uses a custom file format for data and JASC-PAL for the palette. It can also do out of core generation for larger octrees.
 
 ## Usage:
 ```
