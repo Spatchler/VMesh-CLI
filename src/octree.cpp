@@ -19,11 +19,11 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, uint64_t* pCompletedCount)
 
   if (pGrid.getVoxelCount() == 0 || (pGrid.getVoxelCount() == pGrid.getVolume() && pGrid.isRegionAllSame(glm::uvec3(0), mResolution)) ) {
     mNodes.emplace_back(mPalette.at(pGrid.queryVoxelData(glm::uvec3(0))));
-    *pCompletedCount += (std::log2(mResolution) + 1) * pGrid.getVolume();
+    *pCompletedCount += std::log2(mResolution) * pGrid.getVolume();
     return;
   }
 
-  *pCompletedCount += mResolution * mResolution * mResolution;
+  *pCompletedCount += pGrid.getVolume();
 
   std::vector<std::tuple<uint, glm::uvec3, uint>> queue;
 
@@ -37,7 +37,7 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, uint64_t* pCompletedCount)
 
     if (pGrid.isRegionAllSame(origin, size)) {
       mNodes.at(index >> 3)->children[index & 0b111] = mPalette.at(pGrid.queryVoxelData(origin));
-      *pCompletedCount += (std::log2(size) + 1) * size * size * size;
+      *pCompletedCount += std::log2(size) * size * size * size;
       continue;
     }
 
