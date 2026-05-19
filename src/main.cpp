@@ -16,9 +16,18 @@ namespace po = boost::program_options;
 
 int main(int argc, char** argv) {
   uint resolution, subdivisionlevel;
-  bool isSvdag, isVerbose, isCompressed, isConvert, isTribox, isBinary;
+  bool isSvdag, isVerbose, isCompressed, isConvert, isTribox, isBinary, isConvertVox;
   float addColourThreshold;
   std::string in, out, paletteOut, scaleMode, inputType, addColourThresholdStr;
+
+  // VMesh::Palette testPalette;
+  // for (uint r = 0; r <= 255; ++r) {
+  //   for (uint g = 0; g <= 255; ++g) for (uint b = 0; b <= 255; ++b)
+  //     testPalette.addColour({r / 255.f, g / 255.f, b / 255.f}, 0.01f);
+  //   std::println("r: {} / 255, palette size: {}", r, testPalette.size());
+  // }
+  // std::println("testPaletteSize: {}", testPalette.size());
+  // return 0;
   
   // ##############
   // - Parse args -
@@ -34,6 +43,7 @@ int main(int argc, char** argv) {
     ("subdivision-level,L", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining")
     ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode either (proportional, stretch, none)")
     ("voxel-to-svdag", po::bool_switch(&isConvert), "input voxel binary file and output svdag")
+    ("magicavoxel-to-svdag", po::bool_switch(&isConvertVox), "input magicavoxel .vox file and output svdag")
     ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, it tends to be faster on low resolutions(<512) however it only generates binary data")
     ("binary,B", po::bool_switch(&isBinary), "generate binary voxel data instead of coloured voxel data")
     ("colourThreshold", po::value<std::string>(&addColourThresholdStr)->default_value("0.01"), "set the normalized percentage colour difference threshold that is required for a new colour to be added to the palette")
@@ -120,23 +130,33 @@ int main(int argc, char** argv) {
   else if (isSvdag && !isCompressed) std::println("Generating Sparse Voxel Octree of resolution {0}", resolution);
   else if (isSvdag && isCompressed)  std::println("Generating compressed Sparse Voxel Directed Acyclic Graph of resolution {0}", resolution);
   else if (isCompressed) std::println("Generating compressed Voxel Data of resolution {0}", resolution);
+  else if (isConvertVox) std::println("Converting magicavoxel .vox file to svdag");
   else std::println("Generating uncompressed Voxel Data of resolution {0}", resolution);
 
   // Convert
-  if (isConvert) {
+  if (isConvert || isConvertVox) {
     VMesh::VoxelGrid voxelGrid(resolution);
-    if (isTribox || isBinary) voxelGrid.mPalette.addColour({1,1,1});
-    if (!isCompressed) voxelGrid.loadFromFile(in);
+    if (isBinary) voxelGrid.mPalette.addColour({1,1,1});
+    if (isConvertVox) voxelGrid.loadFromVoxFile(in);
+    else if (!isCompressed) voxelGrid.loadFromFile(in);
     else voxelGrid.loadFromFileCompressed(in);
-    resolution = voxelGrid.getResolution();
+
+    for (resolution = 1; resolution < voxelGrid.getResolution(); resolution <<= 1) {}
+
     uint64_t completedCount = 0;
-    uint64_t total = voxelGrid.getMaxDepth() * voxelGrid.getVolume();
+    uint64_t total = std::log2f(resolution) * resolution * resolution * resolution;
     std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Generating SVO", &completedCount, total);
     VMesh::Timer t;
     Octree svo(voxelGrid, &completedCount);
     f.wait();
     std::println("Generating SVO took: {}", t.getTime());
+    if (isConvertVox) std::println("Octree resolution: {}", svo.getResolution());
+
+    std::println("Writing pallete to: {}", paletteOut);
+    voxelGrid.mPalette.writeToFile(paletteOut);
+
     svo.write(out);
+
     std::println("Complete");
     return 0;
   }
@@ -201,7 +221,7 @@ int main(int argc, char** argv) {
       uint64_t trisComplete = 0;
       std::future<void> f = startProgressBar(&grid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
 
-      if (!isTribox) grid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary);
+      if (!isTribox) grid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, addColourThreshold);
       else           grid.IntersectVoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete));
 
       temp = t.getTime();
@@ -235,6 +255,7 @@ int main(int argc, char** argv) {
 
     std::println("Writing pallete to: {}", paletteOut);
     grid.mPalette.writeToFile(paletteOut);
+
     parentSVO.write(out);
     
     std::println("Complete");
@@ -251,7 +272,7 @@ int main(int argc, char** argv) {
   // Voxelize
   uint64_t trisComplete = 0;
   std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
-  if (!isTribox) voxelGrid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary);
+  if (!isTribox) voxelGrid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, addColourThreshold);
   else voxelGrid.IntersectVoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete));
 
   f.wait();
