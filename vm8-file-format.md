@@ -4,7 +4,7 @@ File format for storing index based sparse voxel octrees. Often paired with a JA
 
 UINT_MAX - palette size = air index
 
-An index greater than air index is used to index the palette otherwise it indexes another node in the indices array.
+An index greater than air index is used to index the palette otherwise it points to another node in the indices array.
 
 ### Contents:
 
