@@ -97,12 +97,10 @@ std::vector<std::array<uint32_t, 8>> Octree::generateIndices() {
 }
 
 void Octree::resizePalette(uint pSize) {
-  std::println("got here: {}, {}", mPalette.size(), pSize + 1);
-  mPalette.erase(mPalette.begin() + pSize + 1, mPalette.end());
-  std::println("got mid");
+  // mPalette.erase(mPalette.begin() + pSize + 1, mPalette.end());
+  mPalette.resize(pSize + 1);
   for (uint i = 0; i <= pSize; ++i)
     mPalette[i]->index = std::numeric_limits<uint32_t>::max() - pSize + i;
-  std::println("passed");
 }
 
 uint Octree::getResolution() {
@@ -118,14 +116,16 @@ void Octree::write(std::string pPath) {
   std::println("Generating indices took: {}", t.getTime());
 
   t.start();
-  std::println("Writing octree to: {}", pPath);
+  std::println("Writing octree to: \e[1;3;4;33m{}\e[0m", pPath);
 
   std::ofstream fout;
   fout.open(pPath, std::ios::out | std::ios::binary);
   if (!fout.is_open()) throw std::runtime_error("Could not open output file");
 
   // Header
-  fout << "VMeshOctree\n0100\n";
+  fout << "VMESH8";
+  const uint32_t fileVersion = 100;
+  fout.write(reinterpret_cast<const char*>(&fileVersion), sizeof(fileVersion));
   // Resolution
   fout.write(reinterpret_cast<char*>(&mResolution), sizeof(uint32_t));
   // Palette size
