@@ -16,9 +16,9 @@ namespace po = boost::program_options;
 
 int main(int argc, char** argv) {
   uint resolution, subdivisionlevel;
-  bool isVerbose, isTribox, isBinary;
+  bool isVerbose, isTribox, isBinary, isCreatePalette;
   float addColourDistance2;
-  std::string in, out, outputFormat, scaleMode, addColourDistanceStr;
+  std::string in, out, outputFormat, palettePath, scaleMode, addColourDistanceStr;
 
   // VMesh::Palette testPalette;
   // for (uint r = 0; r <= 255; ++r) {
@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
     ("help,h", "produce help message")
     ("verbose,v", po::bool_switch(&isVerbose), "verbose output")
     ("format,f", po::value<std::string>(&outputFormat), "specify output format (vmu, vmc, vm8, vm64)")
+    ("palette,P", po::value<std::string>(&palettePath), "specify path to an existing palette to use rather than create one")
     ("resolution,R", po::value<uint>(&resolution)->default_value(128), "set voxel grid resolution")
     ("subdivision-level,L", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation")
     ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode either (proportional, stretch, none)")
@@ -98,6 +99,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Is create palette
+  isCreatePalette = !vm.count("palette");
+
   // Colour distance
   try {
     addColourDistance2 = boost::lexical_cast<float>(addColourDistanceStr);
@@ -133,7 +137,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  if ((subdivisionlevel != 0) && (outputFormat == "vm8") || (outputFormat == "vm64")) {
+  if ((subdivisionlevel != 0) && (outputFormat != "vm8")) {
     std::println("Out of core generation is currently only supported for octrees");
     return 1;
   }
@@ -270,14 +274,15 @@ int main(int argc, char** argv) {
     uint numSubdivisions = resolution / subdivisionSize;
     numSubdivisions = numSubdivisions * numSubdivisions * numSubdivisions;
     uint subdimensions = 1 << subdivisionlevel;
-
-    Octree parentSVO(resolution, 255);
     
     std::chrono::duration<double> totalVoxelizationTime, totalOctreeGenerationTime, temp;
 
     VMesh::VoxelGrid grid(subdivisionSize);
     if (isTribox || isBinary) grid.mPalette.addColour({1,1,1});
+    if (!isCreatePalette) grid.mPalette.readFromFile(palettePath);
     if (isVerbose) grid.setLogStream(&std::cout);
+
+    Octree parentSVO(resolution, isCreatePalette ? 255 : grid.mPalette.size());
 
     uint subdivision = 0;
     for (glm::uvec3 o(0); o.x < subdimensions; ++o.x) for (o.y = 0; o.y < subdimensions; ++o.y) for (o.z = 0; o.z < subdimensions; ++o.z, ++subdivision) {
@@ -291,7 +296,7 @@ int main(int argc, char** argv) {
       uint64_t trisComplete = 0;
       std::future<void> f = startProgressBar(&grid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
 
-      if (!isTribox) grid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, addColourDistance2);
+      if (!isTribox) grid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, isCreatePalette, addColourDistance2);
       else           grid.IntersectVoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete));
 
       temp = t.getTime();
@@ -316,15 +321,17 @@ int main(int argc, char** argv) {
 
       std::println("Subdivision: {}/{} took {}", subdivision + 1, numSubdivisions, t.getTime());
     }
-    parentSVO.resizePalette(grid.mPalette.size());
-
     std::println("----------------------------------");
     std::println("Total voxelization time: {}", totalVoxelizationTime);
     std::println("Total octree generation time: {}", totalOctreeGenerationTime);
     std::println("----------------------------------");
 
-    std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
-    grid.mPalette.writeToFile(paletteOut);
+    if (isCreatePalette) {
+      std::println("palsize: {}", grid.mPalette.size());
+      parentSVO.resizePalette(grid.mPalette.size());
+      std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
+      grid.mPalette.writeToFile(paletteOut);
+    }
 
     parentSVO.write(out);
     
@@ -338,17 +345,20 @@ int main(int argc, char** argv) {
 
   if (isVerbose) voxelGrid.setLogStream(&std::cout);
   if (isTribox || isBinary) voxelGrid.mPalette.addColour({1,1,1});
+  if (!isCreatePalette) voxelGrid.mPalette.readFromFile(palettePath);
 
   // Voxelize
   uint64_t trisComplete = 0;
   std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
-  if (!isTribox) voxelGrid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, addColourDistance2);
+  if (!isTribox) voxelGrid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, isCreatePalette, addColourDistance2);
   else voxelGrid.IntersectVoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete));
 
   f.wait();
 
-  std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
-  voxelGrid.mPalette.writeToFile(paletteOut);
+  if (isCreatePalette) {
+    std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
+    voxelGrid.mPalette.writeToFile(paletteOut);
+  }
 
   if (outputFormat == "vmu") voxelGrid.writeToFile(out);
   else {
