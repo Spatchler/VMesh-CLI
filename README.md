@@ -7,10 +7,14 @@ A CLI tool to generate voxel data from a triangle mesh using my C++ library [VMe
 ```
 Usage: vmesh OPTIONS input-path output-path(optional)
 
+Mesh voxelizer
+
 Options:
   -h [ --help ]                       produce help message
   -v [ --verbose ]                    verbose output
   -f [ --format ] arg                 specify output format (vmu, vmc, vm8, vm64)
+  -P [ --palette ] arg                specify path to an existing palette to use rather than create
+                                      one
   -R [ --resolution ] arg (=128)      set voxel grid resolution
   -L [ --subdivision-level ] arg (=0) set depth to generate initial subtrees before combining for 
                                       out of core generation
