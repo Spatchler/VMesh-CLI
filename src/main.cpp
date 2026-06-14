@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
     ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode either (proportional, stretch, none)")
     ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, it tends to be faster on low resolutions(<512) however it only generates binary data")
     ("binary,B", po::bool_switch(&isBinary), "generate binary voxel data instead of coloured voxel data")
-    ("colour-distance", po::value<std::string>(&addColourDistanceStr)->default_value("0.1"), "set the distance between two normalized colours that is required for a new colour to be added to the palette")
+    ("colour-distance", po::value<std::string>(&addColourDistanceStr)->default_value("0.1"), "set the euclidean distance between two normalized rgb colours that is required for a new colour to be added to the palette")
   ;
 
   po::options_description hiddenOptions("Hidden");
@@ -328,6 +328,7 @@ int main(int argc, char** argv) {
 
     if (isCreatePalette) {
       std::println("palsize: {}", grid.mPalette.size());
+      if (grid.mPalette.size() > 255) throw std::runtime_error("Max palette size is 255, try increasing colour-distance");
       parentSVO.resizePalette(grid.mPalette.size());
       std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
       grid.mPalette.writeToFile(paletteOut);

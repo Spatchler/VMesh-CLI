@@ -23,8 +23,8 @@ Options:
                                       it tends to be faster on low resolutions(<512) however it 
                                       only generates binary data
   -B [ --binary ]                     generate binary voxel data instead of coloured voxel data
-  --colour-distance arg (=0.1)        set the distance between two normalized colours that is 
-                                      required for a new colour to be added to the palette
+  --colour-distance arg (=0.1)        set the euclidean distance between two normalized rgb colours
+                                      that is required for a new colour to be added to the palette
 ```
 
 ## Dependencies:
