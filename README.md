@@ -30,7 +30,7 @@ Options:
 ## Dependencies:
 
 * VMesh
-* ASSIMP
+* assimp
 * Boost Program Options
 
 ## Build:
