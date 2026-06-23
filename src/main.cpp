@@ -10,7 +10,6 @@
 #include <fstream>
 
 #include <boost/program_options.hpp>
-#include <thread_pool/thread_pool.h>
 
 namespace po = boost::program_options;
 
