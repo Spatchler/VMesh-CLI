@@ -20,19 +20,12 @@ An index greater than air index is used to index the palette otherwise it points
 ### Loading example:
 
 ```cpp
-void load(const std::filesyste::path& path, uint32_t& resolution, uint32_t& paletteSize, std::vector<std::array<uint32_t, 8>> indices) {
+void load(const std::filesyste::path& path, uint32_t& resolution, uint32_t& paletteSize, std::vector<std::array<uint32_t, 8>>& indices) {
   // Open file
   std::ifstream fin;
   fin.open(path, std::ios::binary | std::ios::in);
   if (!fin.is_open()) throw std::runtime_error("Could not open file");
   
-  // Check header
-  std::string line;
-  std::getline(fin, line);
-  if (line != "VMeshOctree") throw std::invalid_argument("Octree file incorrect format");
-  std::getline(fin, line);
-  if (line != "0100") throw std::invalid_argument("Octree file incorrect format version");
-
   // Check header
   std::string str;
   str.resize(6);
