@@ -10,8 +10,86 @@
 #include <fstream>
 
 #include <boost/program_options.hpp>
+#include <boost/tokenizer.hpp>
 
 namespace po = boost::program_options;
+
+std::string po::option_description::format_name() const {
+  if (!m_short_name.empty()) {
+    return m_long_names.empty()
+      ? std::string("\e[32;1m").append(m_short_name).append("\e[0m\e[32;1m\e[0m")
+      : std::string("\e[32;1m").append(m_short_name).append("\e[0m,\e[32;1m --").append(*m_long_names.begin()).append("\e[0m");
+  }
+  // return std::string("\e[32;1m--").append(*m_long_names.begin()).append("\e[0m");
+  return std::string("\e[32;1m--").append(*m_long_names.begin()).append("\e[0m\e[32;1m\e[0m");
+  /*                                                                          ^^^^^^^^^^^^^
+     These are required to ensure there are always the same number of invisible characters so padding is correct */
+}
+
+void format_one(std::ostream& os, const po::option_description& opt, unsigned first_column_width, unsigned line_length) {
+  std::stringstream ss;
+  ss << "  " << opt.format_name() << ' ' << opt.format_parameter();
+            
+  // Don't use ss.rdbuf() since g++ 2.96 is buggy on it.
+  os << ss.str();
+
+  if (!opt.description().empty()) {
+    if (ss.str().size() >= first_column_width) {
+      os.put('\n'); // first column is too long, lets put description in new line
+      for (unsigned pad = first_column_width; pad > 0; --pad)
+        os.put(' ');
+    } else {
+      for(unsigned pad = 60 - static_cast<unsigned>(ss.str().size()); pad > 0; --pad)
+        os.put(' ');
+    }
+
+    ss.str(std::string());
+    // ss << "\n         " << opt.description() << "\n";
+    // ss << opt.description();
+    // os << "\n";
+    // for(unsigned pad = 5; pad > 0; --pad)
+      // os.put(' ');
+    boost::tokenizer<boost::char_separator<char>> tok(opt.description(), boost::char_separator<char>(" ", "", boost::keep_empty_tokens));
+    for(boost::tokenizer<boost::char_separator<char>>::iterator beg=tok.begin(); beg!=tok.end();++beg) {
+      if (ss.str().size() > 60) {
+        ss << "\n";
+        os << ss.str();
+        for(unsigned pad = 38; pad > 0; --pad)
+        // for(unsigned pad = 5; pad > 0; --pad)
+          os.put(' ');
+        ss.str(std::string());
+      }
+      ss << *beg << " ";
+    }
+    // os << opt.description();
+    os << ss.str();
+  }
+}
+
+void po::options_description::print(std::ostream& os, unsigned width) const {
+  if (!m_caption.empty())
+    os << "\e[34;4;1m" << m_caption << "\e[0m:\n";
+
+  if (!width)
+    width = get_option_column_width();
+
+  /* The options formatting style is stolen from Subversion. */
+  for (unsigned i = 0; i < m_options.size(); ++i) {
+    if (belong_to_group[i])
+      continue;
+
+    const option_description& opt = *m_options[i];
+
+    format_one(os, opt, width, m_line_length);
+
+    os << "\n";
+  }
+
+  for (unsigned j = 0; j < groups.size(); ++j) {            
+    os << "\n";
+    groups[j]->print(os, width);
+  }
+}
 
 int main(int argc, char** argv) {
   uint resolution, subdivisionlevel;
@@ -19,15 +97,6 @@ int main(int argc, char** argv) {
   float addColourDistance2;
   std::string in, out, outputFormat, palettePath, scaleMode, addColourDistanceStr;
 
-  // VMesh::Palette testPalette;
-  // for (uint r = 0; r <= 255; ++r) {
-  //   for (uint g = 0; g <= 255; ++g) for (uint b = 0; b <= 255; ++b)
-  //     testPalette.addColour({r / 255.f, g / 255.f, b / 255.f}, 0.1f);
-  //   std::println("r: {} / 255, palette size: {}", r, testPalette.size());
-  // }
-  // std::println("testPaletteSize: {}", testPalette.size());
-  // return 0;
-  
   // ##############
   // - Parse args -
   // ##############
@@ -37,12 +106,12 @@ int main(int argc, char** argv) {
     ("help,h", "produce help message")
     ("verbose,v", po::bool_switch(&isVerbose), "verbose output")
     ("format,f", po::value<std::string>(&outputFormat), "specify output format (vmu, vmc, vm8, vm64)")
-    ("palette,P", po::value<std::string>(&palettePath), "specify path to an existing palette to use rather than create one")
-    ("resolution,R", po::value<uint>(&resolution)->default_value(128), "set voxel grid resolution")
-    ("subdivision-level,L", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation")
+    ("palette,p", po::value<std::string>(&palettePath), "specify path to an existing palette to use rather than create one")
+    ("resolution,r", po::value<uint>(&resolution)->default_value(128), "set voxel grid resolution")
+    ("subdivision-level,l", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation")
+    ("binary,b", po::bool_switch(&isBinary), "generate binary voxel data instead of coloured voxel data")
     ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode either (proportional, stretch, none)")
     ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, it tends to be faster on low resolutions(<512) however it only generates binary data")
-    ("binary,B", po::bool_switch(&isBinary), "generate binary voxel data instead of coloured voxel data")
     ("colour-distance", po::value<std::string>(&addColourDistanceStr)->default_value("0.1"), "set the euclidean distance between two normalized rgb colours that is required for a new colour to be added to the palette")
   ;
 
@@ -75,7 +144,7 @@ int main(int argc, char** argv) {
   
   // Help
   if (vm.count("help")) {
-    std::println("Usage: vmesh OPTIONS input-path output-path(optional)\n\nMesh voxelizer\n");
+    std::println("\e[34;4;1mUsage\e[0m: \e[35;1mvmesh\e[39m [\e[32mOPTIONS\e[39m] [\e[32mSOURCE\e[39m] [\e[32mDEST\e[39m(optional)]\e[0m\n\nMesh voxelizer\n");
     std::cout << visibleOptions;
     return 0;
   }
