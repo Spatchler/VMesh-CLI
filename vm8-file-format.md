@@ -25,7 +25,7 @@ void load(const std::filesyste::path& path, uint32_t& resolution, uint32_t& pale
   std::ifstream fin;
   fin.open(path, std::ios::binary | std::ios::in);
   if (!fin.is_open()) throw std::runtime_error("Could not open file");
-  
+
   // Check header
   std::string str;
   str.resize(6);

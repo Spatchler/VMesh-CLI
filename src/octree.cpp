@@ -100,7 +100,7 @@ void Octree::resizePalette(uint pSize) {
   // mPalette.erase(mPalette.begin() + pSize + 1, mPalette.end());
   mPalette.resize(pSize + 1);
   for (uint i = 0; i <= pSize; ++i)
-    mPalette[i]->index = std::numeric_limits<uint32_t>::max() - pSize + i;
+    mPalette[i]->index = std::numeric_limits<uint32_t>::max() - pSize + i + 1;
 }
 
 uint Octree::getResolution() {
