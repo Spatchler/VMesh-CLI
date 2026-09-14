@@ -39,8 +39,9 @@ void format_one(std::ostream& os, const po::option_description& opt, unsigned fi
       for (unsigned pad = first_column_width; pad > 0; --pad)
         os.put(' ');
     } else {
-      for(unsigned pad = 60 - static_cast<unsigned>(ss.str().size()); pad > 0; --pad)
+      for(unsigned pad = 60 - static_cast<unsigned>(ss.str().size()) - 1; pad > 0; --pad)
         os.put(' ');
+      os.put('-');
     }
 
     ss.str(std::string());
@@ -51,7 +52,8 @@ void format_one(std::ostream& os, const po::option_description& opt, unsigned fi
       // os.put(' ');
     boost::tokenizer<boost::char_separator<char>> tok(opt.description(), boost::char_separator<char>(" ", "", boost::keep_empty_tokens));
     for(boost::tokenizer<boost::char_separator<char>>::iterator beg=tok.begin(); beg!=tok.end();++beg) {
-      if (ss.str().size() > 60) {
+      // if (ss.str().size() > 45) {
+      if (ss.str().size() > 35) {
         ss << "\n";
         os << ss.str();
         for(unsigned pad = 38; pad > 0; --pad)
@@ -68,7 +70,7 @@ void format_one(std::ostream& os, const po::option_description& opt, unsigned fi
 
 void po::options_description::print(std::ostream& os, unsigned width) const {
   if (!m_caption.empty())
-    os << "\e[34;4;1m" << m_caption << "\e[0m:\n";
+    os << "\e[34;1m" << m_caption << "\e[0m:\n";
 
   if (!width)
     width = get_option_column_width();
@@ -108,11 +110,11 @@ int main(int argc, char** argv) {
     ("format,f", po::value<std::string>(&outputFormat), "specify output format (vmu, vmc, vm8, vm64)")
     ("palette,p", po::value<std::string>(&palettePath), "specify path to an existing palette to use rather than create one")
     ("resolution,r", po::value<uint>(&resolution)->default_value(128), "set voxel grid resolution")
-    ("subdivision-level,l", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation")
+    ("subdivision-level,l", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation(Not supported atm)")
     ("binary,b", po::bool_switch(&isBinary), "generate binary voxel data instead of coloured voxel data")
-    ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode either (proportional, stretch, none)")
-    ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, it tends to be faster on low resolutions(<512) however it only generates binary data")
-    ("colour-distance", po::value<std::string>(&addColourDistanceStr)->default_value("0.1"), "set the euclidean distance between two normalized rgb colours that is required for a new colour to be added to the palette")
+    ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode (proportional, stretch, none)")
+    ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, only supports binary data and slower")
+    ("colour-distance", po::value<std::string>(&addColourDistanceStr)->default_value("0.1"), "set the minimum euclidean distance between two normalized rgb colours that is required for a new colour to be added to the palette")
   ;
 
   po::options_description hiddenOptions("Hidden");
@@ -144,7 +146,7 @@ int main(int argc, char** argv) {
   
   // Help
   if (vm.count("help")) {
-    std::println("\e[34;4;1mUsage\e[0m: \e[35;1mvmesh\e[39m [\e[32mOPTIONS\e[39m] [\e[32mSOURCE\e[39m] [\e[32mDEST\e[39m(optional)]\e[0m\n\nMesh voxelizer\n");
+    std::println("\e[34;1mUsage\e[0m: \e[35;1mvmesh\e[39m [\e[32mOPTIONS\e[39m] [\e[32mSOURCE\e[39m] [\e[32mDEST\e[39m(optional)]\e[0m\n\nMesh voxelizer\n");
     std::cout << visibleOptions;
     return 0;
   }
