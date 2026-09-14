@@ -14,16 +14,25 @@ struct Node {
   std::array<std::shared_ptr<Node>, 8> children;
 };
 
+class Palette {
+public:
+  Palette(uint pSize);
+
+  void resize(uint pSize);
+
+  uint size() { return mNodes.size(); };
+
+  std::vector<std::shared_ptr<Node>> mNodes;
+};
+
 class Octree {
 public:
-  Octree(uint pResolution, uint pPaletteSize);
-  Octree(VMesh::VoxelGrid& pGrid, uint64_t* pCompletedCount = NULL);
+  Octree(uint pResolution, Palette* pPalette);
+  Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedCount = NULL);
 
-  void attach(Octree& pOctree, glm::uvec3& pOrigin);
+  void attach(Octree& pOctree, const glm::uvec3& pOrigin);
 
   std::vector<std::array<uint32_t, 8>> generateIndices();
-
-  void resizePalette(uint pSize);
 
   uint getResolution();
 
@@ -36,5 +45,5 @@ public:
 
   uint mResolution;
   std::vector<std::shared_ptr<Node>> mNodes;
-  std::vector<std::shared_ptr<Node>> mPalette;
+  Palette* mPalette; // TODO: Use shared ptr instead of raw ptr
 };

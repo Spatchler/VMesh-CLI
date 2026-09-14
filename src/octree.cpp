@@ -1,13 +1,23 @@
 #include <octree.hpp>
 
-Octree::Octree(uint pResolution, uint pPaletteSize)
-:mResolution(pResolution) {
-  // Init palette
-  for (uint i = 0; i <= pPaletteSize; ++i)
-    mPalette.emplace_back(std::make_shared<Node>(std::numeric_limits<uint32_t>::max() - pPaletteSize + i));
+Palette::Palette(uint pSize) {
+  for (uint i = 0; i <= pSize; ++i)
+    mNodes.emplace_back(std::make_shared<Node>(std::numeric_limits<uint32_t>::max() - pSize + i));
 }
 
-Octree::Octree(VMesh::VoxelGrid& pGrid, uint64_t* pCompletedCount) {
+void Palette::resize(uint pSize) {
+  // mPalette.erase(mPalette.begin() + pSize + 1, mPalette.end());
+  mNodes.resize(pSize + 1);
+  for (uint i = 0; i <= pSize; ++i) 
+    mNodes[i]->index = std::numeric_limits<uint32_t>::max() - pSize + i + 1;
+}
+
+Octree::Octree(uint pResolution, Palette* pPalette)
+:mResolution(pResolution), mPalette(pPalette) {
+}
+
+Octree::Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedCount)
+:mPalette(pPalette) {
   for (mResolution = 1; mResolution < pGrid.getResolution(); mResolution <<= 1) {}
 
   uint64_t completedCount;
@@ -15,11 +25,10 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, uint64_t* pCompletedCount) {
     pCompletedCount = &completedCount;
 
   // Init palette
-  for (uint i = 0; i <= pGrid.mPalette.size(); ++i)
-    mPalette.emplace_back(std::make_shared<Node>(std::numeric_limits<uint32_t>::max() - pGrid.mPalette.size() + i));
+  // mPalette->resize(pGrid.mPalette.size());
 
   if (pGrid.getVoxelCount() == 0 || (pGrid.getVoxelCount() == pGrid.getVolume() && pGrid.isRegionAllSame(glm::uvec3(0), mResolution)) ) {
-    mNodes.emplace_back(mPalette.at(pGrid.queryVoxelData(glm::uvec3(0))));
+    mNodes.emplace_back(mPalette->mNodes.at(pGrid.queryVoxelData(glm::uvec3(0))));
     *pCompletedCount += std::log2(mResolution) * pGrid.getVolume();
     return;
   }
@@ -37,7 +46,7 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, uint64_t* pCompletedCount) {
     uint                size = std::get<2>(queue.at(i));
 
     if (pGrid.isRegionAllSame(origin, size)) {
-      mNodes.at(index >> 3)->children[index & 0b111] = mPalette.at(pGrid.queryVoxelData(origin));
+      mNodes.at(index >> 3)->children[index & 0b111] = mPalette->mNodes.at(pGrid.queryVoxelData(origin));
       *pCompletedCount += std::log2(size) * size * size * size;
       continue;
     }
@@ -64,18 +73,19 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, uint64_t* pCompletedCount) {
 // }
 }
 
-void Octree::attach(Octree& pOctree, glm::uvec3& pOrigin) {
+void Octree::attach(Octree& pOctree, const glm::uvec3& pOrigin) {
   if (pOctree.getResolution() > mResolution) throw std::runtime_error("Can't attach a larger octree");
   glm::uvec3 o(0);
   uint size = mResolution;
-  std::shared_ptr<Node>& n = mNodes.size() == 0 ? mNodes.emplace_back(std::make_shared<Node>()) : mNodes.at(0);
+  if (mNodes.size() == 0) mNodes.emplace_back(std::make_shared<Node>());
+  std::shared_ptr<Node>* n = &mNodes.at(0);
   while ((size >>= 1) != (pOctree.getResolution() >> 1)) {
     uint i = toChildIndex((pOrigin - o) / size);
     o = toChildPos(i) * size;
-    if (!n->children[i]) n->children[i] = std::make_shared<Node>();
-    n = n->children[i];
+    if (!(*n)->children[i]) (*n)->children[i] = std::make_shared<Node>();
+    n = &(*n)->children[i];
   }
-  n = pOctree.mNodes.at(0);
+  *n = pOctree.mNodes.at(0);
 }
 
 std::vector<std::array<uint32_t, 8>> Octree::generateIndices() {
@@ -96,13 +106,6 @@ std::vector<std::array<uint32_t, 8>> Octree::generateIndices() {
   return indices;
 }
 
-void Octree::resizePalette(uint pSize) {
-  // mPalette.erase(mPalette.begin() + pSize + 1, mPalette.end());
-  mPalette.resize(pSize + 1);
-  for (uint i = 0; i <= pSize; ++i)
-    mPalette[i]->index = std::numeric_limits<uint32_t>::max() - pSize + i + 1;
-}
-
 uint Octree::getResolution() {
   return mResolution;
 }
@@ -112,7 +115,8 @@ void Octree::write(std::string pPath) {
   pPath.append(".vm8");
   std::println("Generating indices");
   VMesh::Timer t;
-  std::vector<std::array<uint32_t, 8>> indices = generateIndices();
+  std::vector<std::array<uint32_t, 8>> indices{{mPalette->mNodes.at(0)->index}};
+  if (mNodes.size()) indices = generateIndices();
   std::println("Generating indices took: {}", t.getTime());
 
   t.start();
@@ -129,7 +133,7 @@ void Octree::write(std::string pPath) {
   // Resolution
   fout.write(reinterpret_cast<char*>(&mResolution), sizeof(uint32_t));
   // Palette size
-  uint32_t paletteSize = mPalette.size()  - 1;
+  uint32_t paletteSize = mPalette->size()  - 1;
   fout.write(reinterpret_cast<char*>(&paletteSize), sizeof(uint32_t));
   // Indices
   uint32_t indicesSize = indices.size();
@@ -144,9 +148,9 @@ void Octree::processNode(std::shared_ptr<Node> pNode, std::vector<std::array<uin
   pNode->index = pArangement.size();
   pArangement.emplace_back();
   for (uint i = 0; i < 8; ++i) {
-    std::shared_ptr<Node> n = pNode->children[i] ? pNode->children[i] : mPalette.at(0);
+    std::shared_ptr<Node> n = pNode->children[i] ? pNode->children[i] : mPalette->mNodes.at(0);
     pArangement.back()[i] = &n->index;
-    if (n->index < std::numeric_limits<uint32_t>::max() - mPalette.size()) // Isnt leaf
+    if (n->index < std::numeric_limits<uint32_t>::max() - mPalette->size()) // Isnt leaf
       pQueue.push_back(n);
   }
 }

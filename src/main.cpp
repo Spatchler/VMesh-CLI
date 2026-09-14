@@ -287,7 +287,8 @@ int main(int argc, char** argv) {
     uint64_t total = std::log2f(resolution) * resolution * resolution * resolution;
     std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Generating SVO", &completedCount, total);
     VMesh::Timer t;
-    Octree svo(voxelGrid, &completedCount);
+    Palette nodePalette(voxelGrid.mPalette.size());
+    Octree svo(voxelGrid, &nodePalette, &completedCount);
     f.wait();
     std::println("Generating SVO took: {}", t.getTime());
 
@@ -350,7 +351,8 @@ int main(int argc, char** argv) {
     if (!isCreatePalette) grid.mPalette.readFromFile(palettePath);
     if (isVerbose) grid.setLogStream(&std::cout);
 
-    Octree parentSVO(resolution, isCreatePalette ? 255 : grid.mPalette.size());
+    Palette nodePalette(isCreatePalette ? 255 : grid.mPalette.size()); 
+    Octree parentSVO(resolution, &nodePalette);
 
     uint subdivision = 0;
     for (glm::uvec3 o(0); o.x < subdimensions; ++o.x) for (o.y = 0; o.y < subdimensions; ++o.y) for (o.z = 0; o.z < subdimensions; ++o.z, ++subdivision) {
@@ -381,7 +383,7 @@ int main(int argc, char** argv) {
       uint64_t completedCount = 0;
       uint64_t total = grid.getMaxDepth() * grid.getVolume();
       f = startProgressBar(&grid.mDefaultLogMutex, "Generating SVO", &completedCount, total);
-      Octree svo(grid, &completedCount);
+      Octree svo(grid, &nodePalette, &completedCount);
       f.wait();
       parentSVO.attach(svo, origin);
 
@@ -397,7 +399,7 @@ int main(int argc, char** argv) {
     if (isCreatePalette) {
       std::println("palsize: {}", grid.mPalette.size());
       if (grid.mPalette.size() > 255) throw std::runtime_error("Max palette size is 255, try increasing colour-distance");
-      parentSVO.resizePalette(grid.mPalette.size());
+      // nodePalette.resize(grid.mPalette.size());
       std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
       grid.mPalette.writeToFile(paletteOut);
     }
