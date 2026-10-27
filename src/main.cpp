@@ -95,7 +95,7 @@ void po::options_description::print(std::ostream& os, unsigned width) const {
 
 int main(int argc, char** argv) {
   uint resolution, subdivisionlevel;
-  bool isVerbose, isTribox, isBinary, isCreatePalette, isPrintMetadata;
+  bool isVerbose, isTribox, isBinary, isCreatePalette, isPrintMetadata, isUseMatrixBarycentricComp;
   float addColourDistance2;
   std::string in, out, outputFormat, palettePath, scaleMode, addColourDistanceStr;
 
@@ -113,9 +113,10 @@ int main(int argc, char** argv) {
     ("subdivision-level,l", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation")
     ("binary,b", po::bool_switch(&isBinary), "generate binary voxel data instead of coloured voxel data")
     ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode (proportional, stretch, none)")
-    ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, only supports binary data and slower")
     ("colour-distance", po::value<std::string>(&addColourDistanceStr)->default_value("0.1"), "set the minimum euclidean distance between two normalized rgb colours that is required for a new colour to be added to the palette")
     ("metadata,m", po::bool_switch(&isPrintMetadata), "print file metadata")
+    ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, only supports binary data and slower")
+    ("matrixBarycentric", po::bool_switch(&isUseMatrixBarycentricComp), "use inverse matrix method for barycentric coordinate calculation instead of the default which uses Cramer's rule")
   ;
 
   po::options_description hiddenOptions("Hidden");
@@ -241,7 +242,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  if (isTribox) isBinary = true;
+  isBinary = isBinary || isTribox;
 
   // ############
   // - Generate -
@@ -375,6 +376,7 @@ int main(int argc, char** argv) {
     if (isTribox || isBinary) grid.mPalette.addColour({1,1,1});
     if (!isCreatePalette) grid.mPalette.readFromFile(palettePath);
     if (isVerbose) grid.setLogStream(&std::cout);
+    grid.setUseMatrixBarycentricCompute(isUseMatrixBarycentricComp);
 
     Palette nodePalette(isCreatePalette ? 255 : grid.mPalette.size()); 
     Octree parentSVO(resolution, &nodePalette);
@@ -442,6 +444,7 @@ int main(int argc, char** argv) {
   if (isVerbose) voxelGrid.setLogStream(&std::cout);
   if (isTribox || isBinary) voxelGrid.mPalette.addColour({1,1,1});
   if (!isCreatePalette) voxelGrid.mPalette.readFromFile(palettePath);
+  voxelGrid.setUseMatrixBarycentricCompute(isUseMatrixBarycentricComp);
 
   // Voxelize
   uint64_t trisComplete = 0;
