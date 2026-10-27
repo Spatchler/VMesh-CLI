@@ -7,6 +7,15 @@
 #include <memory>
 #include "VMesh/voxelGrid.hpp"
 
+struct OctreeMetadata {
+  void loadFromFile(std::ifstream& fin);
+  void print() noexcept;
+  std::array<uint8_t, 3> fileVersion;
+  uint32_t resolution;
+  uint32_t paletteSize;
+  uint32_t numIndices;
+};
+
 struct Node {
   Node() = default;
   Node(uint32_t i) : index(i) {};

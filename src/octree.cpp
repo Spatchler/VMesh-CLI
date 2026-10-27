@@ -1,5 +1,26 @@
 #include <octree.hpp>
 
+void OctreeMetadata::loadFromFile(std::ifstream& fin) {
+  std::string str;
+  std::streampos fPos = fin.tellg();
+  fin.seekg(0);
+  std::getline(fin, str);
+  if (str != "VMESH8") throw std::invalid_argument("Incorrect file format");
+  fin.read(reinterpret_cast<char*>(fileVersion.data()), 3);
+  fin.read(reinterpret_cast<char*>(&resolution), 4);
+  fin.read(reinterpret_cast<char*>(&paletteSize), 4);
+  fin.read(reinterpret_cast<char*>(&numIndices), 4);
+  fin.seekg(fPos);
+}
+
+void OctreeMetadata::print() noexcept {
+  std::println("File format: VMESH8 sparse voxel octree (vm8)");
+  std::println("File version: {}.{}.{}", fileVersion[0], fileVersion[1], fileVersion[2]);
+  std::println("Resolution: {}", resolution);
+  std::println("Palette size: {}", paletteSize);
+  std::println("Number of indices: {}", numIndices);
+}
+
 Palette::Palette(uint pSize) {
   for (uint i = 0; i <= pSize; ++i)
     mNodes.emplace_back(std::make_shared<Node>(std::numeric_limits<uint32_t>::max() - pSize + i));

@@ -161,19 +161,28 @@ int main(int argc, char** argv) {
   if (isPrintMetadata) {
     std::ifstream fin;
     fin.open(in, std::ios::binary | std::ios::in);
+    // Format
     std::string str;
     std::getline(fin, str);
-    if (str == "VMESHU") std::println("VMESHU: uncompressed voxel data(vmu)");
-    else if (str == "VMESHC") std::println("VMESHC: compressed voxel data(vmc)");
-    else if (str == "VMESH8") std::println("VMESH8: octree(vm8)");
-    else if (str == "VMESH64") std::println("VMESH64: 64tree(vm64)");
+    if (str == "VMESHU") {
+      VMesh::VoxelGridMetadata metadata;
+      metadata.loadFromFile(fin);
+      metadata.print();
+    }
+    else if (str == "VMESHC") {
+      VMesh::CompressedVoxelGridMetadata metadata;
+      metadata.loadFromFile(fin);
+      metadata.print();
+    }
+    else if (str == "VMESH8") {
+      OctreeMetadata metadata;
+      metadata.loadFromFile(fin);
+      metadata.print();
+    }
     else {
-      std::println("Not recognised");
+      std::println("File not recognised");
       return 0;
     }
-    std::array<uint8_t, 3> version;
-    fin.read(reinterpret_cast<char*>(version.data()), 3);
-    std::println("Version: {}.{}.{}", version[0], version[1], version[2]);
     return 0;
   }
 
