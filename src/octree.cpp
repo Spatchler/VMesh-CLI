@@ -48,7 +48,7 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedC
   // Init palette
   // mPalette->resize(pGrid.mPalette.size());
 
-  if (pGrid.getVoxelCount() == 0 || (pGrid.getVoxelCount() == pGrid.getVolume() && pGrid.isRegionAllSame(glm::uvec3(0), mResolution)) ) {
+  if (pGrid.getVoxelCount() == 0 || (pGrid.getVoxelCount() == pGrid.getVolume() && pGrid.isOctreeOctantAllSame(VMesh::VoxelGrid::zorder(glm::uvec3(0)), mResolution)) ) {
     mNodes.emplace_back(mPalette->mNodes.at(pGrid.queryVoxelData(glm::uvec3(0))));
     *pCompletedCount += std::log2(mResolution) * pGrid.getVolume();
     return;
@@ -66,7 +66,7 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedC
     const glm::uvec3  origin = std::get<1>(queue.at(i));
     uint                size = std::get<2>(queue.at(i));
 
-    if (pGrid.isRegionAllSame(origin, size)) {
+    if (pGrid.isOctreeOctantAllSame(VMesh::VoxelGrid::zorder(origin), size)) {
       mNodes.at(index >> 3)->children[index & 0b111] = mPalette->mNodes.at(pGrid.queryVoxelData(origin));
       *pCompletedCount += std::log2(size) * size * size * size;
       continue;
