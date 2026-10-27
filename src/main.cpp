@@ -95,7 +95,7 @@ void po::options_description::print(std::ostream& os, unsigned width) const {
 
 int main(int argc, char** argv) {
   uint resolution, subdivisionlevel;
-  bool isVerbose, isTribox, isBinary, isCreatePalette;
+  bool isVerbose, isTribox, isBinary, isCreatePalette, isPrintMetadata;
   float addColourDistance2;
   std::string in, out, outputFormat, palettePath, scaleMode, addColourDistanceStr;
 
@@ -110,11 +110,12 @@ int main(int argc, char** argv) {
     ("format,f", po::value<std::string>(&outputFormat), "specify output format (vmu, vmc, vm8, vm64)")
     ("palette,p", po::value<std::string>(&palettePath), "specify path to an existing palette to use rather than create one")
     ("resolution,r", po::value<uint>(&resolution)->default_value(128), "set voxel grid resolution")
-    ("subdivision-level,l", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation(Not supported atm)")
+    ("subdivision-level,l", po::value<uint>(&subdivisionlevel)->default_value(0), "set depth to generate initial subtrees before combining for out of core generation")
     ("binary,b", po::bool_switch(&isBinary), "generate binary voxel data instead of coloured voxel data")
     ("scale-mode", po::value<std::string>(&scaleMode)->default_value("proportional"), "scaling mode (proportional, stretch, none)")
     ("tribox", po::bool_switch(&isTribox), "use triangle box intersections instead of DDA voxelization, only supports binary data and slower")
     ("colour-distance", po::value<std::string>(&addColourDistanceStr)->default_value("0.1"), "set the minimum euclidean distance between two normalized rgb colours that is required for a new colour to be added to the palette")
+    ("metadata,m", po::bool_switch(&isPrintMetadata), "print file metadata")
   ;
 
   po::options_description hiddenOptions("Hidden");
@@ -155,6 +156,25 @@ int main(int argc, char** argv) {
   if (!vm.count("in")) {
     std::println("Missing input file path, use -h for help");
     return 1;
+  }
+
+  if (isPrintMetadata) {
+    std::ifstream fin;
+    fin.open(in, std::ios::binary | std::ios::in);
+    std::string str;
+    std::getline(fin, str);
+    if (str == "VMESHU") std::println("VMESHU: uncompressed voxel data(vmu)");
+    else if (str == "VMESHC") std::println("VMESHC: compressed voxel data(vmc)");
+    else if (str == "VMESH8") std::println("VMESH8: octree(vm8)");
+    else if (str == "VMESH64") std::println("VMESH64: 64tree(vm64)");
+    else {
+      std::println("Not recognised");
+      return 0;
+    }
+    std::array<uint8_t, 3> version;
+    fin.read(reinterpret_cast<char*>(version.data()), 3);
+    std::println("Version: {}.{}.{}", version[0], version[1], version[2]);
+    return 0;
   }
 
   // Output format
@@ -233,15 +253,9 @@ int main(int argc, char** argv) {
   // vmu
   if (!isConvertVox) {
     std::string str;
-    str.resize(6);
-    fin.read(str.data(), 6);
-    fin.seekg(0);
+    std::getline(fin, str);
     isConvertU = str == "VMESHU";
-    // vmc
-    if (!isConvertU) {
-      fin.read(str.data(), 6);
-      isConvertC = str == "VMESHC";
-    }
+    isConvertC = str == "VMESHC";
   }
   fin.close();
 

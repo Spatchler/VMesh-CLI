@@ -2,7 +2,7 @@ workspace "main"
     architecture "x64"
     toolset "gcc"
 
-    buildoptions "--std=c++23"
+    buildoptions { "--std=c++23" }
 
     configurations {
         "debug",

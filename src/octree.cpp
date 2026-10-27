@@ -127,9 +127,9 @@ void Octree::write(std::string pPath) {
   if (!fout.is_open()) throw std::runtime_error("Could not open output file");
 
   // Header
-  fout << "VMESH8";
-  const uint32_t fileVersion = 100;
-  fout.write(reinterpret_cast<const char*>(&fileVersion), sizeof(fileVersion));
+  fout << "VMESH8\n";
+  std::array<uint8_t, 3> fileVersion { 1,0,0 };
+  fout.write(reinterpret_cast<char*>(fileVersion.data()), 3);
   // Resolution
   fout.write(reinterpret_cast<char*>(&mResolution), sizeof(uint32_t));
   // Palette size
