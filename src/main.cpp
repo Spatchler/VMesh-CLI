@@ -1,8 +1,9 @@
 #include "VMesh/model.hpp"
 #include "VMesh/voxelGrid.hpp"
 
-#include "progressBar.hpp"
 #include "octree.hpp"
+
+#include <barkeep/barkeep.h>
 
 #include <array>
 #include <vector>
@@ -13,6 +14,7 @@
 #include <boost/tokenizer.hpp>
 
 namespace po = boost::program_options;
+namespace bk = barkeep;
 
 std::string po::option_description::format_name() const {
   if (!m_short_name.empty()) {
@@ -301,8 +303,17 @@ int main(int argc, char** argv) {
     }
     if (outputFormat == "vmc") {
       uint64_t voxelsComplete = 0;
-      std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Compressing", &voxelsComplete, voxelGrid.getVolume());
-      voxelGrid.writeToFileCompressed(out, &voxelsComplete);
+      // std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Compressing", &voxelsComplete, voxelGrid.getVolume());
+      auto bar = bk::ProgressBar(&voxelsComplete, {
+          .total = voxelGrid.getVolume(),
+          .message = "Compressing",
+          .speed = 1.,
+          .speed_unit = "/s",
+          .style = bk::ProgressBarStyle::Rich,
+      });
+      VMesh::CompressedVoxelData_t compressedData { voxelGrid.generateCompressedVoxelData(&voxelsComplete) };
+      bar->done();
+      voxelGrid.writeToFileCompressed(out, compressedData);
       std::println("Complete");
       return 0;
     }
@@ -311,11 +322,19 @@ int main(int argc, char** argv) {
 
     uint64_t completedCount = 0;
     uint64_t total = std::log2f(resolution) * resolution * resolution * resolution;
-    std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Generating SVO", &completedCount, total);
+    // std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Generating SVO", &completedCount, total);
+    auto bar = bk::ProgressBar(&completedCount, {
+        .total = total,
+        .message = "Generating SVO",
+        .speed = 1.,
+        .speed_unit = "/s",
+        .style = bk::ProgressBarStyle::Rich,
+    });
     VMesh::Timer t;
     Palette nodePalette(voxelGrid.mPalette.size());
     Octree svo(voxelGrid, &nodePalette, &completedCount);
-    f.wait();
+    bar->done();
+    // f.wait();
     std::println("Generating SVO took: {}", t.getTime());
 
     if (isConvertVox) std::println("Octree resolution: {}", svo.getResolution());
@@ -329,9 +348,10 @@ int main(int argc, char** argv) {
   // Load model
   VMesh::Model model;
   {
-    std::println("Loading model...");
+    auto anim = bk::Animation({ .message = "Loading model" });
     VMesh::Timer t;
     model.load(in);
+    anim->done();
     std::println("Loading model took: {}", t.getTime());
   }
 
@@ -391,7 +411,15 @@ int main(int argc, char** argv) {
       grid.setOrigin(origin);
 
       uint64_t trisComplete = 0;
-      std::future<void> f = startProgressBar(&grid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
+
+      // std::future<void> f = startProgressBar(&grid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
+      auto bar = bk::ProgressBar(&trisComplete, {
+        .total = model.getTriCount(),
+        .message = "Voxelizing",
+        .speed = 1.,
+        .speed_unit = "/s",
+        .style = bk::ProgressBarStyle::Rich,
+      });
 
       if (!isTribox) grid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, isCreatePalette, addColourDistance2);
       else           grid.IntersectVoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete));
@@ -400,7 +428,8 @@ int main(int argc, char** argv) {
       totalVoxelizationTime += temp;
 
       if (!grid.getVoxelCount()) {
-        f.wait();
+        // f.wait();
+        bar->done();
         std::println("Subdivision: {}/{} took {}", subdivision + 1, numSubdivisions, t.getTime());
         continue;
       }
@@ -409,9 +438,17 @@ int main(int argc, char** argv) {
 
       uint64_t completedCount = 0;
       uint64_t total = grid.getMaxDepth() * grid.getVolume();
-      f = startProgressBar(&grid.mDefaultLogMutex, "Generating SVO", &completedCount, total);
+      // f = startProgressBar(&grid.mDefaultLogMutex, "Generating SVO", &completedCount, total);
+      bar = bk::ProgressBar(&completedCount, {
+        .total = total,
+        .message = "Generating SVO",
+        .speed = 1.,
+        .speed_unit = "/s",
+        .style = bk::ProgressBarStyle::Rich,
+      });
       Octree svo(grid, &nodePalette, &completedCount);
-      f.wait();
+      // f.wait();
+      bar->done();
       parentSVO.attach(svo, origin);
 
       totalOctreeGenerationTime += t.getTime() - temp;
@@ -448,11 +485,19 @@ int main(int argc, char** argv) {
 
   // Voxelize
   uint64_t trisComplete = 0;
-  std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
+  // std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
+  auto bar = bk::ProgressBar(&trisComplete, {
+    .total = model.getTriCount(),
+    .message = "Voxelizing",
+    .speed = 1.,
+    .speed_unit = "/s",
+    .style = bk::ProgressBarStyle::Rich,
+  });
   if (!isTribox) voxelGrid.DDAvoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete), !isBinary, isCreatePalette, addColourDistance2);
   else voxelGrid.IntersectVoxelizeModel(model, reinterpret_cast<uint*>(&trisComplete));
 
-  f.wait();
+  bar->done();
+  // f.wait();
 
   if (isCreatePalette) {
     std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
@@ -462,8 +507,17 @@ int main(int argc, char** argv) {
   if (outputFormat == "vmu") voxelGrid.writeToFile(out);
   else {
     uint64_t voxelsComplete = 0;
-    std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Compressing", &voxelsComplete, voxelGrid.getVolume());
-    voxelGrid.writeToFileCompressed(out, &voxelsComplete);
+    // std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Compressing", &voxelsComplete, voxelGrid.getVolume());
+    auto bar = bk::ProgressBar(&voxelsComplete, {
+      .total = voxelGrid.getVolume(),
+      .message = "Compressing",
+      .speed = 1.,
+      .speed_unit = "/s",
+      .style = bk::ProgressBarStyle::Rich,
+    });
+    VMesh::CompressedVoxelData_t compressedData { voxelGrid.generateCompressedVoxelData(&voxelsComplete) };
+    bar->done();
+    voxelGrid.writeToFileCompressed(out, compressedData);
   }
 
   std::println("Complete");

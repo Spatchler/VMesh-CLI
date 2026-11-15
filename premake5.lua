@@ -29,7 +29,7 @@ workspace "main"
         defines {"_LINUX"}
 
     filter "system:windows"
-        defines {"_WINDOWS"}
+        defines {"_WINDOWS", "uint=uint32_t"}
 
 outputdir = "%{cfg.buildcfg}/%{cfg.system}/%{cfg.architectrure}"
 project "VMesh-cli"
