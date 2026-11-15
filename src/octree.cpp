@@ -56,15 +56,15 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedC
 
   *pCompletedCount += pGrid.getVolume();
   
-  std::vector<std::tuple<uint, glm::uvec3, uint>> queue;
+  std::queue<std::tuple<uint, glm::uvec3, uint>> queue;
 
   mNodes.emplace_back(std::make_shared<Node>());
-  for (uint8_t i = 0; i < 8; ++i) queue.push_back({i, toChildPos(i) * (mResolution >> 1), mResolution >> 1});
+  for (uint8_t i = 0; i < 8; ++i) queue.push({i, toChildPos(i) * (mResolution >> 1), mResolution >> 1});
 
-  for (uint i = 0; i < queue.size(); ++i) {
-    uint               index = std::get<0>(queue.at(i));
-    const glm::uvec3  origin = std::get<1>(queue.at(i));
-    uint                size = std::get<2>(queue.at(i));
+  for (; !queue.empty(); queue.pop()) {
+    uint               index = std::get<0>(queue.front());
+    const glm::uvec3  origin = std::get<1>(queue.front());
+    uint                size = std::get<2>(queue.front());
 
     if (pGrid.isOctreeOctantAllSame(VMesh::VoxelGrid::zorder(origin), size)) {
       mNodes.at(index >> 3)->children[index & 0b111] = mPalette->mNodes.at(pGrid.queryVoxelData(origin));
@@ -74,7 +74,7 @@ Octree::Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedC
 
     size >>= 1;
     for (uint j = 0; j < 8; ++j)
-      queue.push_back(std::make_tuple(mNodes.size() << 3 | j, origin + toChildPos(j) * size, size));
+      queue.push(std::make_tuple(mNodes.size() << 3 | j, origin + toChildPos(j) * size, size));
     std::shared_ptr<Node> n = std::make_shared<Node>();
     mNodes.emplace_back(n);
     mNodes.at(index >> 3)->children[index & 0b111] = n;
