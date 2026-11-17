@@ -61,8 +61,9 @@ project "VMesh-cli"
     }
 
     links {
-        "boost_program_options",
-        "assimp",
-        "VMesh"
+      "pthread",
+      "boost_program_options",
+      "assimp",
+      "VMesh"
     }
 

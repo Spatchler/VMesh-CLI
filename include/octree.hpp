@@ -6,7 +6,12 @@
 #include <array>
 #include <limits>
 #include <memory>
+
 #include "VMesh/voxelGrid.hpp"
+
+#include <barkeep/barkeep.h>
+
+namespace bk = barkeep;
 
 struct OctreeMetadata {
   void loadFromFile(std::ifstream& fin);
@@ -46,10 +51,10 @@ public:
 
   uint getResolution();
 
-  void write(std::string pPath);
+  void write(std::string pPath, std::vector<std::array<uint32_t, 8>>& pIndices);
 
   void generateNode();
-  void processNode(std::shared_ptr<Node> pNode, std::vector<std::array<uint32_t*, 8>>& pArangement, std::vector<std::shared_ptr<Node>>& pQueue);
+  void processNode(std::shared_ptr<Node> pNode, std::vector<std::array<uint32_t*, 8>>& pArangement, std::queue<std::shared_ptr<Node>>& pQueue);
   static uint toChildIndex(const glm::uvec3& pPos);
   static glm::uvec3 toChildPos(uint8_t pIndex);
 

@@ -110,14 +110,19 @@ void Octree::attach(Octree& pOctree, const glm::uvec3& pOrigin) {
 }
 
 std::vector<std::array<uint32_t, 8>> Octree::generateIndices() {
+  if (!mNodes.size()) {
+    std::vector<std::array<uint32_t, 8>> indices{{mPalette->mNodes.at(0)->index}};
+    return indices;
+  }
+
   std::vector<std::array<uint32_t, 8>> indices;
   std::vector<std::array<uint32_t*, 8>> arangement;
-  std::vector<std::shared_ptr<Node>> queue;
+  std::queue<std::shared_ptr<Node>> queue;
 
   processNode(mNodes.at(0), arangement, queue); // Process root node
   
-  for (uint i = 0; i < queue.size(); ++i)
-    processNode(queue[i], arangement, queue);
+  for (; !queue.empty(); queue.pop())
+    processNode(queue.front(), arangement, queue);
 
   indices.resize(arangement.size());
   for (uint i = 0; i < arangement.size(); ++i)
@@ -131,16 +136,12 @@ uint Octree::getResolution() {
   return mResolution;
 }
 
-void Octree::write(std::string pPath) {
+void Octree::write(std::string pPath, std::vector<std::array<uint32_t, 8>>& pIndices) {
   // Write octree
-  pPath.append(".vm8");
-  std::println("Generating indices");
   VMesh::Timer t;
-  std::vector<std::array<uint32_t, 8>> indices{{mPalette->mNodes.at(0)->index}};
-  if (mNodes.size()) indices = generateIndices();
-  std::println("Generating indices took: {}", t.getTime());
 
-  t.start();
+  pPath.append(".vm8");
+
   std::println("Writing octree to: \e[1;3;4;33m{}\e[0m", pPath);
 
   std::ofstream fout;
@@ -157,22 +158,22 @@ void Octree::write(std::string pPath) {
   uint32_t paletteSize = mPalette->size()  - 1;
   fout.write(reinterpret_cast<char*>(&paletteSize), sizeof(uint32_t));
   // Indices
-  uint32_t indicesSize = indices.size();
+  uint32_t indicesSize = pIndices.size();
   fout.write(reinterpret_cast<char*>(&indicesSize), sizeof(uint32_t));
-  fout.write(reinterpret_cast<char*>(indices.data()), indices.size() * 8ull * sizeof(uint32_t));
+  fout.write(reinterpret_cast<char*>(pIndices.data()), pIndices.size() * 8ull * sizeof(uint32_t));
 
   fout.close();
   std::println("Writing took: {}", t.getTime());
 }
 
-void Octree::processNode(std::shared_ptr<Node> pNode, std::vector<std::array<uint32_t*, 8>>& pArangement, std::vector<std::shared_ptr<Node>>& pQueue) {
+void Octree::processNode(std::shared_ptr<Node> pNode, std::vector<std::array<uint32_t*, 8>>& pArangement, std::queue<std::shared_ptr<Node>>& pQueue) {
   pNode->index = pArangement.size();
   pArangement.emplace_back();
   for (uint i = 0; i < 8; ++i) {
     std::shared_ptr<Node> n = pNode->children[i] ? pNode->children[i] : mPalette->mNodes.at(0);
     pArangement.back()[i] = &n->index;
     if (n->index < std::numeric_limits<uint32_t>::max() - mPalette->size()) // Isnt leaf
-      pQueue.push_back(n);
+      pQueue.push(n);
   }
 }
 
