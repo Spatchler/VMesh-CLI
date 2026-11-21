@@ -179,12 +179,13 @@ namespace Tasks {
 
   class ProgressBarTask: public SpinnerTask {
   public:
-    ProgressBarTask(const std::string& pName, std::atomic<uint64_t>* pCounter, uint64_t pTotal, uint pBarWidth)
+    ProgressBarTask(const std::string& pName, std::atomic<uint64_t>* pCounter, uint64_t pTotal, uint pBarWidth, uint pPercentExponent)
     :SpinnerTask(pName),
     mCounter(pCounter),
     mTotal(pTotal),
     mTotalInv(pTotal == 0 ? 0 : 1./pTotal),
-    mBarWidth(pBarWidth)
+    mBarWidth(pBarWidth),
+    mPercentExponent(pPercentExponent)
     {}
 
     void setCounter(std::atomic<uint64_t>* pCounter) {
@@ -208,7 +209,7 @@ namespace Tasks {
 
     void tickImpl() override {
       double percent {mCounter == nullptr ? 0 : mCounter->load() * mTotalInv};
-      percent = percent * percent * percent * percent * percent * percent * percent;
+      percent = std::pow(percent, mPercentExponent);
       int ipercent {static_cast<int>(percent*100)};
       double barPercent = percent * mBarWidth;
       // double barPercent {mCounter == nullptr ? 0 : mCounter->load() * mBarMultiplier};
@@ -244,6 +245,7 @@ namespace Tasks {
     uint64_t mTotal;
     double mTotalInv;
     uint mBarWidth;
+    uint mPercentExponent;
   };
 
   class TaskList {

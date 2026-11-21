@@ -300,11 +300,14 @@ int main(int argc, char** argv) {
       taskList.stop();
       voxelGrid.writeToFile(out);
       std::println("{}✔{} Complete", Tasks::getStyle(fg::green), Tasks::getStyle(fg::reset));
+      std::println("Resolution: {}", voxelGrid.getResolution());
+      if (isConvertVox) std::println("Pallete -> \e[1;3;4;33m{}\e[0m", paletteOut);
+      std::println("Voxel data -> \e[1;3;4;33m{}.{}\e[0m", out, outputFormat);
       return 0;
     }
     if (outputFormat == "vmc") {
       std::atomic<uint64_t> voxelsComplete = 0;
-      std::shared_ptr<Tasks::ProgressBarTask> compressionTask {std::make_shared<Tasks::ProgressBarTask>("Compressing", &voxelsComplete, voxelGrid.getVolume(), 30)};
+      std::shared_ptr<Tasks::ProgressBarTask> compressionTask {std::make_shared<Tasks::ProgressBarTask>("Compressing", &voxelsComplete, voxelGrid.getVolume(), 30, 1)};
       taskList.addTask(compressionTask);
       compressionTask->begin();
       VMesh::CompressedVoxelData_t compressedData { voxelGrid.generateCompressedVoxelData(&voxelsComplete) };
@@ -312,6 +315,9 @@ int main(int argc, char** argv) {
       taskList.stop();
       voxelGrid.writeToFileCompressed(out, compressedData);
       std::println("{}✔{} Complete", Tasks::getStyle(fg::green), Tasks::getStyle(fg::reset));
+      std::println("Resolution: {}", voxelGrid.getResolution());
+      if (isConvertVox) std::println("Pallete -> \e[1;3;4;33m{}\e[0m", paletteOut);
+      std::println("Voxel data -> \e[1;3;4;33m{}.{}\e[0m", out, outputFormat);
       return 0;
     }
 
@@ -319,7 +325,7 @@ int main(int argc, char** argv) {
 
     std::atomic<uint64_t> completedCount = 0;
     uint64_t total = std::log2f(resolution) * resolution * resolution * resolution;
-    std::shared_ptr<Tasks::ProgressBarTask> octreeTask {std::make_shared<Tasks::ProgressBarTask>("Generating SVO", &completedCount, total, 30)};
+    std::shared_ptr<Tasks::ProgressBarTask> octreeTask {std::make_shared<Tasks::ProgressBarTask>("Generating SVO", &completedCount, total, 30, 7)};
     taskList.addTask(octreeTask);
     octreeTask->begin();
     Palette nodePalette(voxelGrid.mPalette.size());
@@ -336,12 +342,11 @@ int main(int argc, char** argv) {
 
     taskList.stop();
 
-    if (isConvertVox) {
-      std::println("Octree resolution: {}", svo.getResolution());
-      std::println("Palette written to: \e[1;3;4;33m{}\e[0m", paletteOut);
-    }
-
     std::println("{}✔{} Complete", Tasks::getStyle(fg::green), Tasks::getStyle(fg::reset));
+    std::println("Resolution: {}", voxelGrid.getResolution());
+    if (isConvertVox) std::println("Pallete -> \e[1;3;4;33m{}\e[0m", paletteOut);
+    std::println("Voxel data -> \e[1;3;4;33m{}.{}\e[0m", out, outputFormat);
+
     return 0;
   }
 
@@ -402,8 +407,8 @@ int main(int argc, char** argv) {
     for (glm::uvec3 o(0); o.x < subdimensions; ++o.x) for (o.y = 0; o.y < subdimensions; ++o.y) for (o.z = 0; o.z < subdimensions; ++o.z, ++subdivision) {
       VMesh::Timer t;
       std::shared_ptr<Tasks::SpinnerTask> subdivisionTask {std::make_shared<Tasks::SpinnerTask>(std::format("Subdivision: {}/{}", subdivision+1, numSubdivisions))};
-      std::shared_ptr<Tasks::ProgressBarTask> voxelizingTask {std::make_shared<Tasks::ProgressBarTask>("Voxelizing", nullptr, 0, 30)};
-      std::shared_ptr<Tasks::ProgressBarTask> octreeTask {std::make_shared<Tasks::ProgressBarTask>("Generating SVO", nullptr, 0, 30)};
+      std::shared_ptr<Tasks::ProgressBarTask> voxelizingTask {std::make_shared<Tasks::ProgressBarTask>("Voxelizing", nullptr, 0, 30, 1)};
+      std::shared_ptr<Tasks::ProgressBarTask> octreeTask {std::make_shared<Tasks::ProgressBarTask>("Generating SVO", nullptr, 0, 30, 7)};
       taskList.addTask(subdivisionTask);
       subdivisionTask->begin();
       subdivisionTask->addSubTask(voxelizingTask);
@@ -486,43 +491,30 @@ int main(int argc, char** argv) {
 
   // Voxelize
   std::atomic<uint64_t> trisComplete = 0;
-  // std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Voxelizing", &trisComplete, model.getTriCount());
-  // auto bar = bk::ProgressBar(&trisComplete, {
-  //   .total = model.getTriCount(),
-  //   .message = "Voxelizing",
-  //   .speed = 1.,
-  //   .speed_unit = "/s",
-  //   .style = bk::ProgressBarStyle::Rich,
-  // });
+  std::shared_ptr<Tasks::ProgressBarTask> voxelizingTask {std::make_shared<Tasks::ProgressBarTask>("Voxelizing", &trisComplete, model.getTriCount(), 30, 1)};
+  taskList.addTask(voxelizingTask);
+  voxelizingTask->begin();
   if (!isTribox) voxelGrid.DDAvoxelizeModel(model, &trisComplete, !isBinary, isCreatePalette, addColourDistance2);
   else voxelGrid.IntersectVoxelizeModel(model, &trisComplete);
+  voxelizingTask->complete(true);
 
-  // bar->done();
-  // f.wait();
-
-  if (isCreatePalette) {
-    std::println("Writing pallete to: \e[1;3;4;33m{}\e[0m", paletteOut);
-    voxelGrid.mPalette.writeToFile(paletteOut);
-  }
+  if (isCreatePalette) voxelGrid.mPalette.writeToFile(paletteOut);
 
   if (outputFormat == "vmu") voxelGrid.writeToFile(out);
   else {
     std::atomic<uint64_t> voxelsComplete = 0;
-    // std::future<void> f = startProgressBar(&voxelGrid.mDefaultLogMutex, "Compressing", &voxelsComplete, voxelGrid.getVolume());
-    // auto bar = bk::ProgressBar(&voxelsComplete, {
-    //   .total = voxelGrid.getVolume(),
-    //   .message = "Compressing",
-    //   .speed = 1.,
-    //   .speed_unit = "/s",
-    //   .style = bk::ProgressBarStyle::Rich,
-    // });
+    std::shared_ptr<Tasks::ProgressBarTask> compressionTask {std::make_shared<Tasks::ProgressBarTask>("Compressing", &voxelsComplete, voxelGrid.getVolume(), 30, 1)};
+    taskList.addTask(compressionTask);
+    compressionTask->begin();
     VMesh::CompressedVoxelData_t compressedData { voxelGrid.generateCompressedVoxelData(&voxelsComplete) };
-    // bar->done();
+    compressionTask->complete(true);
     voxelGrid.writeToFileCompressed(out, compressedData);
   }
 
   taskList.stop();
   std::println("{}✔{} Complete", Tasks::getStyle(fg::green), Tasks::getStyle(fg::reset));
+  std::println("Pallete -> \e[1;3;4;33m{}\e[0m", paletteOut);
+  std::println("Voxel data -> \e[1;3;4;33m{}.{}\e[0m", out, outputFormat);
   model.release();
   return 0;
 }
