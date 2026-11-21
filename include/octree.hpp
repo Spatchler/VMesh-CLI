@@ -9,10 +9,6 @@
 
 #include "VMesh/voxelGrid.hpp"
 
-#include <barkeep/barkeep.h>
-
-namespace bk = barkeep;
-
 struct OctreeMetadata {
   void loadFromFile(std::ifstream& fin);
   void print() noexcept;
@@ -43,7 +39,7 @@ public:
 class Octree {
 public:
   Octree(uint pResolution, Palette* pPalette);
-  Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedCount = NULL);
+  Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, std::atomic<uint64_t>* pCompletedCount = nullptr);
 
   void attach(Octree& pOctree, const glm::uvec3& pOrigin);
 

@@ -37,12 +37,12 @@ Octree::Octree(uint pResolution, Palette* pPalette)
 :mResolution(pResolution), mPalette(pPalette) {
 }
 
-Octree::Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, uint64_t* pCompletedCount)
+Octree::Octree(VMesh::VoxelGrid& pGrid, Palette* pPalette, std::atomic<uint64_t>* pCompletedCount)
 :mPalette(pPalette) {
   for (mResolution = 1; mResolution < pGrid.getResolution(); mResolution <<= 1) {}
 
-  uint64_t completedCount;
-  if (!pCompletedCount)
+  std::atomic<uint64_t> completedCount;
+  if (pCompletedCount == nullptr)
     pCompletedCount = &completedCount;
 
   // Init palette
@@ -137,12 +137,7 @@ uint Octree::getResolution() {
 }
 
 void Octree::write(std::string pPath, std::vector<std::array<uint32_t, 8>>& pIndices) {
-  // Write octree
-  VMesh::Timer t;
-
   pPath.append(".vm8");
-
-  std::println("Writing octree to: \e[1;3;4;33m{}\e[0m", pPath);
 
   std::ofstream fout;
   fout.open(pPath, std::ios::out | std::ios::binary);
@@ -163,7 +158,6 @@ void Octree::write(std::string pPath, std::vector<std::array<uint32_t, 8>>& pInd
   fout.write(reinterpret_cast<char*>(pIndices.data()), pIndices.size() * 8ull * sizeof(uint32_t));
 
   fout.close();
-  std::println("Writing took: {}", t.getTime());
 }
 
 void Octree::processNode(std::shared_ptr<Node> pNode, std::vector<std::array<uint32_t*, 8>>& pArangement, std::queue<std::shared_ptr<Node>>& pQueue) {
