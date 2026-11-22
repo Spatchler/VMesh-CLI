@@ -33,8 +33,8 @@ namespace Tasks {
 
   class ScopedTimer: public Timer {
   public:
-    ScopedTimer(const std::string& pName) {
-      mName = pName;
+    ScopedTimer(std::string&& pName) {
+      mName = std::move(pName);
       start();
       std::println("'{0}' timer started", mName);
     }
@@ -54,8 +54,8 @@ namespace Tasks {
 
   class Task {
   public:
-    Task(const std::string &pName)
-    :mName(pName) {
+    Task(std::string&& pName)
+    :mName(std::move(pName)) {
     }
 
     void setLineWidth(uint pLineWidth) {
@@ -133,7 +133,7 @@ namespace Tasks {
 
     constexpr bool isComplete() { return mIsComplete; }
 
-    void setName(const std::string& pName) { mName = pName; }
+    void setName(std::string&& pName) { mName = std::move(pName); }
 
     constexpr std::string getName() { return mName; }
 
@@ -174,12 +174,12 @@ namespace Tasks {
 
   class SpinnerTask: public Task {
   public:
-    SpinnerTask(const std::string& pName)
-    :Task(pName) {
+    SpinnerTask(std::string&& pName)
+    :Task(std::move(pName)) {
     }
 
-    void setSpinnerStates(const std::vector<std::string>& pSpinnerStates) {
-      mSpinnerStates = pSpinnerStates;
+    void setSpinnerStates(std::vector<std::string>&& pSpinnerStates) {
+      mSpinnerStates = std::move(pSpinnerStates);
     }
   protected:
     void tickImpl() override {
@@ -192,8 +192,8 @@ namespace Tasks {
 
   class ProgressBarTask: public SpinnerTask {
   public:
-    ProgressBarTask(const std::string& pName, std::atomic<uint64_t>* pCounter, uint64_t pTotal, uint pBarWidth, uint pPercentExponent)
-    :SpinnerTask(pName),
+    ProgressBarTask(std::string&& pName, std::atomic<uint64_t>* pCounter, uint64_t pTotal, uint pBarWidth, uint pPercentExponent)
+    :SpinnerTask(std::move(pName)),
     mCounter(pCounter),
     mTotal(pTotal),
     mTotalInv(pTotal == 0 ? 0 : 1./pTotal),
@@ -262,6 +262,9 @@ namespace Tasks {
     TaskList(uint pLineWidth) : mLineWidth(pLineWidth) {}
     TaskList(const std::vector<std::shared_ptr<Task>>& pTasks, uint pLineWidth = 100)
     :mTasks(pTasks), mLineWidth(pLineWidth) {
+    }
+    TaskList(std::vector<std::shared_ptr<Task>>&& pTasks, uint pLineWidth = 100)
+    :mTasks(std::move(pTasks)), mLineWidth(pLineWidth) {
     }
 
     void addTask(std::shared_ptr<Task> pTask) {
