@@ -354,6 +354,7 @@ int main(int argc, char** argv) {
   VMesh::Model model;
   std::shared_ptr<Tasks::SpinnerTask> loadingModelTask {std::make_shared<Tasks::SpinnerTask>("Loading model")};
   taskList.addTask(loadingModelTask);
+  loadingModelTask->begin();
   model.load(in);
   loadingModelTask->complete(true);
 

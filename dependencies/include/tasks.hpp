@@ -58,6 +58,17 @@ namespace Tasks {
     :mName(pName) {
     }
 
+    void setLineWidth(uint pLineWidth) {
+      std::lock_guard<std::mutex> lock(mSubTasksMutex);
+      mLineWidth = pLineWidth;
+      for (auto& s: mSubTasks)
+        s->setLineWidth(mLineWidth - 4);
+    }
+
+    uint getLineWidth() {
+      return mLineWidth;
+    }
+
     void lockSubTasks() {
       mSubTasksMutex.lock();
       for (auto& i: mSubTasks)
@@ -73,6 +84,7 @@ namespace Tasks {
     void addSubTask(std::shared_ptr<Task> pTask) {
       std::lock_guard<std::mutex> lock(mSubTasksMutex);
       mSubTasks.emplace_back(pTask);
+      pTask->setLineWidth(mLineWidth - 4);
     }
 
     uint getNumLines() {
@@ -104,8 +116,8 @@ namespace Tasks {
         //   i == mSubTasks.size()-1
         //   ? std::format("{}└{} {}", getStyle(fgB::gray), getStyle(fg::reset), mSubTasks[i]->getText())
         //   : std::format("{}├{} {}", getStyle(fgB::gray), getStyle(fg::reset), mSubTasks[i]->getText());
-        mAllText += "\n";
-        mAllText += std::format("{}", mSubTasks[i]->getText());
+        mAllText += "\n  │ ";
+        mAllText += mSubTasks[i]->getText();
       }
     }
 
@@ -128,19 +140,19 @@ namespace Tasks {
     void complete(bool pSuccess) {
       mIsComplete = true;
       mCompletedTime = mTimer.getTime();
+      std::string text = getCompletedText(pSuccess);
+      std::string time = std::format("{}", getTime());
+      for (uint i = text.size(); i < (mLineWidth - time.size()); ++i)
+        text += " ";
+      text += time;
       mCompletedText =
         pSuccess
-        ? std::format("{}✔{} {}", getStyle(fg::green), getStyle(fg::reset), getCompletedText(pSuccess))
-        : std::format("{}✖{} {}", getStyle(fg::red), getStyle(fg::reset), getCompletedText(pSuccess));
+        ? std::format("{}✔{} {}", getStyle(fg::green), getStyle(fg::reset), text)
+        : std::format("{}✖{} {}", getStyle(fg::red), getStyle(fg::reset), text);
     }
   protected:
     virtual std::string getCompletedText(bool pSuccess) {
-      std::string text = mName;
-      std::string time = std::format("{}", getTime());
-      for (uint i = text.size(); i < (100 - time.size()); ++i)
-        text += " ";
-      text += time;
-      return text;
+      return mName;
     }
 
     virtual void tickImpl() {
@@ -149,6 +161,7 @@ namespace Tasks {
     std::string mName;
     std::string mText;
     std::vector<std::shared_ptr<Task>> mSubTasks;
+    uint mLineWidth {100};
   private:
     std::mutex mSubTasksMutex;
     std::string mCompletedText;
@@ -199,12 +212,7 @@ namespace Tasks {
   protected:
     std::string getCompletedText(bool pSuccess) override {
       // std::string text = std::format("{} 100% {} {} / {}", mName, getBar(mBarWidth, mBarWidth), mTotal, mTotal);
-      std::string text = std::format("{} 100% {} / {}", mName, mTotal, mTotal);
-      std::string time = std::format("{}", getTime());
-      for (uint i = text.size(); i < (100 - time.size()); ++i)
-        text += " ";
-      text += time;
-      return text;
+      return std::format("{} 100% {} / {}", mName, mTotal, mTotal);
     }
 
     void tickImpl() override {
@@ -251,13 +259,15 @@ namespace Tasks {
   class TaskList {
   public:
     TaskList() = default;
-    TaskList(const std::vector<std::shared_ptr<Task>>& pTasks)
-    :mTasks(pTasks) {
+    TaskList(uint pLineWidth) : mLineWidth(pLineWidth) {}
+    TaskList(const std::vector<std::shared_ptr<Task>>& pTasks, uint pLineWidth = 100)
+    :mTasks(pTasks), mLineWidth(pLineWidth) {
     }
 
     void addTask(std::shared_ptr<Task> pTask) {
       std::lock_guard<std::mutex> lock(mTasksMutex);
       mTasks.emplace_back(pTask);
+      pTask->setLineWidth(mLineWidth);
     }
 
     void setUpdateFrequency_ms(uint pF) {
@@ -322,6 +332,7 @@ namespace Tasks {
   private:
     static inline void moveCursorUp(uint lines) { std::println("\033[{}A", lines); }
 
+    uint mLineWidth {100};
     std::vector<std::shared_ptr<Task>> mTasks;
     std::mutex mTasksMutex;
     uint mPreviousNumLines {0};
