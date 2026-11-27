@@ -81,7 +81,7 @@ namespace Tasks {
         i->unlockSubTasks();
     }
 
-    void addSubTask(std::shared_ptr<Task> pTask) {
+    void addSubTask(const std::shared_ptr<Task>& pTask) {
       std::lock_guard<std::mutex> lock(mSubTasksMutex);
       mSubTasks.emplace_back(pTask);
       pTask->setLineWidth(mLineWidth - 4);
@@ -106,7 +106,7 @@ namespace Tasks {
       mAllText = mText;
       if (mSubTasks.size() == 0) return;
       for (int i = 0; i < mSubTasks.size(); ++i) {
-        pIsLast.push_back(i == mSubTasks.size()-1);
+        pIsLast.emplace_back(i == mSubTasks.size()-1);
         mSubTasks[i]->tick(pIsLast);
         pIsLast.pop_back();
         // mAllText += "\n";
@@ -267,7 +267,7 @@ namespace Tasks {
     :mTasks(std::move(pTasks)), mLineWidth(pLineWidth) {
     }
 
-    void addTask(std::shared_ptr<Task> pTask) {
+    void addTask(const std::shared_ptr<Task>& pTask) {
       std::lock_guard<std::mutex> lock(mTasksMutex);
       mTasks.emplace_back(pTask);
       pTask->setLineWidth(mLineWidth);
@@ -317,12 +317,13 @@ namespace Tasks {
       mIsComplete.store(true);
     }
 
-    // bool isComplete() {
-    //   if (mLogThread == nullptr) return true;
-    //   return mLogThread->joinable();
-    // }
+    bool isComplete() {
+      if (mLogThread == nullptr) return true;
+      return mLogThread->joinable();
+    }
 
     void wait() {
+      if (mLogThread == nullptr) return;
       mLogThread->join();
       delete mLogThread;
       mLogThread = nullptr;
